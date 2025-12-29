@@ -1,4 +1,5 @@
-import React, { ReactNode, ErrorInfo } from 'react';
+
+import React, { ReactNode, ErrorInfo, Component } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -19,9 +20,11 @@ interface ErrorBoundaryState {
 
 // Simple Error Boundary Component
 // Fix: Added explicit constructor and destructured props to resolve TypeScript error where 'props' was not found on type 'ErrorBoundary'
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Using named import Component to ensure proper resolution of generic state and props members
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    // Initialize state properly
     this.state = {
       hasError: false,
       error: null
@@ -37,6 +40,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
+    // Destructure state and props from this, ensuring they are recognized by TS
     const { hasError, error } = this.state;
     const { children } = this.props;
 

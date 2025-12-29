@@ -1,3 +1,4 @@
+
 import Papa from 'papaparse';
 import { CTE, Note, User, ConfigData, Profile } from '../types';
 import { parseCurrency } from '../utils';
@@ -18,14 +19,15 @@ const generateId = (serie: any, cte: any) => {
 
 export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], notes: Note[], profiles: Profile[], config: ConfigData }> => {
   try {
-    // Fetch all necessary tabs including NOTES
-    const [baseData, usersData, profilesData, processControlData, notesTabData, configData] = await Promise.all([
-      fetchCsv(getSheetUrl('BASE')),
-      fetchCsv(getSheetUrl('USERS')),
-      fetchCsv(getSheetUrl('PROFILES')),
-      fetchCsv(getSheetUrl('PROCESS_CONTROL')), 
-      fetchCsv(getSheetUrl('NOTES')),
-      fetchCsv(getSheetUrl('DATA'))
+    // Fetch all necessary tabs. 
+    // DATA tab is fetched WITHOUT headers because Row 1 contains actual data (DATA HOJE)
+    const [baseData, usersData, profilesData, processControlData, notesTabData, configRaw] = await Promise.all([
+      fetchCsv(getSheetUrl('BASE'), true),
+      fetchCsv(getSheetUrl('USERS'), true),
+      fetchCsv(getSheetUrl('PROFILES'), true),
+      fetchCsv(getSheetUrl('PROCESS_CONTROL'), true), 
+      fetchCsv(getSheetUrl('NOTES'), true),
+      fetchCsv(getSheetUrl('DATA'), false) // False here is key!
     ]);
 
     // --- Process BASE (CTEs) ---
@@ -65,24 +67,19 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
       permissions: row['PERMISSIONS'] || row['Permissions'] || '[]'
     })).filter(p => p.name);
 
-    // --- Process NOTES (Combined PROCESS_CONTROL and NOTES tabs) ---
+    // --- Process NOTES ---
     const baseTimestamp = Date.now();
-    
-    // Helper to process a note row from any sheet with robust column checking
     const processNoteRow = (row: any, index: number, sourcePrefix: string): Note | null => {
       const serie = row['SERIE'] || row['serie'] || row['Serie'] || '';
       const cte = row['CTE'] || row['cte'] || row['Cte'] || '';
-      
       const user = row['USER'] || row['USUARIO'] || row['user'] || row['usuario'] || 'Sistema';
       const text = row['DESCRIPTION'] || row['TEXTO'] || row['description'] || row['texto'] || '';
       const statusStr = row['STATUS'] || row['status'];
       const statusBuscaFlag = row['STATUS_BUSCA'] || row['status_busca'];
       
-      // If essential ID data is missing, skip
       if (!serie && !cte) return null;
 
       return {
-        // Use ID from sheet if available, otherwise generate one to avoid collisions between sheets
         id: row['ID'] || `${sourcePrefix}-${baseTimestamp}-${index}`,
         cteId: generateId(serie, cte), 
         date: row['DATA'] || row['data'],
@@ -93,65 +90,36 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
       };
     };
 
-    const notesFromProcess = processControlData
-        .map((row, i) => processNoteRow(row, i, 'PC'))
-        .filter((n): n is Note => n !== null);
-
-    const notesFromTab = notesTabData
-        .map((row, i) => processNoteRow(row, i, 'NT'))
-        .filter((n): n is Note => n !== null);
-
-    // Merge notes
+    const notesFromProcess = processControlData.map((row, i) => processNoteRow(row, i, 'PC')).filter((n): n is Note => n !== null);
+    const notesFromTab = notesTabData.map((row, i) => processNoteRow(row, i, 'NT')).filter((n): n is Note => n !== null);
     const allNotes = [...notesFromProcess, ...notesFromTab];
     
-    // Deduplicate logic
     const uniqueNotesMap = new Map();
     allNotes.forEach(note => {
         const contentHash = `${note.user}-${note.text}-${note.date}`;
         const key = (note.id && String(note.id).length > 5) ? `${note.id}-${contentHash}` : contentHash;
-        
-        if (!uniqueNotesMap.has(key)) {
-            uniqueNotesMap.set(key, note);
-        }
+        if (!uniqueNotesMap.has(key)) uniqueNotesMap.set(key, note);
     });
-    
     const notes = Array.from(uniqueNotesMap.values());
 
-    // --- Process CONFIG (DATA Tab) ---
-    const todayStr = configData[0] ? Object.values(configData[0])[1] as string : new Date().toLocaleDateString('pt-BR');
-    const tomorrowStr = configData[1] ? Object.values(configData[1])[1] as string : '';
-    const limitDays = configData[2] ? parseInt(Object.values(configData[2])[1] as string) : 3;
+    // --- Process CONFIG (DATA Tab - Using index because header:false) ---
+    // Row 0: ["DATA HOJE", "29/12/2025", "", "25/12/2025"]
+    // Row 1: ["DATA AMANHÃ", "30/12/2025", "", "31/12/2025"]
+    // Row 2: ["PRAZO LIMITE", "10", "", ""]
+    
+    const todayStr = (configRaw[0] && configRaw[0][1]) || new Date().toLocaleDateString('pt-BR');
+    const tomorrowStr = (configRaw[1] && configRaw[1][1]) || '';
+    const limitDays = (configRaw[2] && parseInt(configRaw[2][1])) || 3;
 
-    // Extract Holidays from Column D (index 3)
-    // Since header: true is on, Row 1 is used as keys. 
-    // This means the first holiday (e.g., 25/12/2025) might be the key name for column D.
-    const holidays: string[] = [];
-
-    if (configData.length > 0) {
-        // Try to identify the 4th column (D) key
-        const keys = Object.keys(configData[0]);
-        if (keys.length >= 3) {
-             const keyD = keys[keys.length - 1]; // Assuming D is the last column
-             
-             // If the key itself looks like a date, add it
-             if (keyD.match(/\d{2}\/\d{2}\/\d{4}/)) {
-                 holidays.push(keyD);
-             }
-
-             // Iterate rows to get the rest of column D
-             configData.forEach(row => {
-                 const val = row[keyD];
-                 if (typeof val === 'string' && val.match(/\d{2}\/\d{2}\/\d{4}/)) {
-                     holidays.push(val);
-                 }
-             });
-        }
-    }
+    // Holidays are in Column D (Index 3)
+    const holidays: string[] = configRaw
+        .map(row => row[3])
+        .filter(val => typeof val === 'string' && val.match(/\d{2}\/\d{2}\/\d{4}/));
 
     const config: ConfigData = {
       dataHoje: todayStr,
       dataAmanha: tomorrowStr,
-      prazoLimiteCritico: limitDays || 3,
+      prazoLimiteCritico: limitDays,
       holidays: holidays
     };
 
@@ -163,11 +131,11 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
   }
 };
 
-const fetchCsv = (url: string): Promise<any[]> => {
+const fetchCsv = (url: string, hasHeader: boolean = true): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse(url, {
       download: true,
-      header: true,
+      header: hasHeader,
       skipEmptyLines: true,
       complete: (results) => resolve(results.data as any[]),
       error: (err) => reject(err)
@@ -176,26 +144,15 @@ const fetchCsv = (url: string): Promise<any[]> => {
 };
 
 export const postDataToScript = async (action: string, payload: any) => {
-  const body = JSON.stringify({
-    action,
-    payload
-  });
-
+  const body = JSON.stringify({ action, payload });
   try {
     const response = await fetch(SCRIPT_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', 
-      },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: body
     });
-    
-    if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+    return await response.json();
   } catch (e) {
     console.error("Error sending data", e);
     return { success: false, error: String(e) };
