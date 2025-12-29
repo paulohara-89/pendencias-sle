@@ -1,3 +1,4 @@
+
 import { CTE, PaymentType } from './types';
 
 // Helper to parse Brazilian currency "1.500,00" to float
@@ -50,12 +51,23 @@ export const parseDateTime = (dateStr: string): number => {
     }
 };
 
-// Helper to calculate difference in BUSINESS days from Today (Skipping Holidays)
-export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[]): number | null => {
+// Helper to calculate difference in BUSINESS days from a reference date (Skipping Holidays)
+export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], referenceDate?: Date | string): number | null => {
   const target = parseDate(dateStr);
   if (!target) return null;
   
-  const today = new Date();
+  // Use referenceDate (system clock) if provided, otherwise fallback to local Date
+  let today: Date;
+  if (referenceDate) {
+    if (typeof referenceDate === 'string') {
+        today = parseDate(referenceDate) || new Date();
+    } else {
+        today = new Date(referenceDate);
+    }
+  } else {
+    today = new Date();
+  }
+  
   today.setHours(0,0,0,0);
   target.setHours(0,0,0,0);
   
@@ -70,13 +82,13 @@ export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[]): 
   const start = new Date(today);
   const end = new Date(target);
   
-  // Determine direction
-  const isFuture = end.getTime() >= start.getTime();
-  
+  if (start.getTime() === end.getTime()) return 0;
+
+  const isFuture = end.getTime() > start.getTime();
   let count = 0;
   
-  const loopStart = isFuture ? new Date(start) : new Date(end);
-  const loopEnd = isFuture ? new Date(end) : new Date(start);
+  const loopStart = new Date(isFuture ? start : end);
+  const loopEnd = new Date(isFuture ? end : start);
   
   // Move loopStart one day forward to start counting difference
   loopStart.setDate(loopStart.getDate() + 1);
@@ -93,7 +105,6 @@ export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[]): 
   return isFuture ? count : -count;
 };
 
-// Legacy simple diff for compatibility if needed
 export const getDaysDifference = (dateStr: string): number | null => {
   const target = parseDate(dateStr);
   if (!target) return null;
@@ -131,9 +142,9 @@ export const getPaymentColor = (type: string) => {
 // Helper to add days skipping holidays
 const addBusinessDays = (startDate: Date, daysToAdd: number, holidays: string[]): Date => {
     let currentDate = new Date(startDate);
+    currentDate.setHours(0,0,0,0);
     let addedDays = 0;
     
-    // Parse holidays to timestamps for easy comparison
     const holidayTimestamps = new Set(
         holidays.map(h => {
             const d = parseDate(h);
@@ -141,13 +152,11 @@ const addBusinessDays = (startDate: Date, daysToAdd: number, holidays: string[])
         }).filter(Boolean) as number[]
     );
 
-    // If tolerance is 0, return immediately
     if (daysToAdd === 0) return currentDate;
 
     while (addedDays < daysToAdd) {
-        // Move to next day
         currentDate.setDate(currentDate.getDate() + 1);
-        const stamp = new Date(currentDate).setHours(0,0,0,0);
+        const stamp = currentDate.getTime();
         
         if (!holidayTimestamps.has(stamp)) {
             addedDays++;
@@ -166,23 +175,24 @@ export const calculateStatus = (cte: CTE, config: { today: Date, limitDays: numb
   const limit = new Date(limitDate);
   limit.setHours(0,0,0,0);
 
-  // Critical Logic: Limit Date + Config Limit Days (skipping holidays) < Today
+  // Critical Logic Check
   const criticalThresholdDate = addBusinessDays(limit, config.limitDays, config.holidays);
   criticalThresholdDate.setHours(0,0,0,0);
 
-  const diffTime = limit.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  // Centralized Diff Calculation
+  const daysDiff = calculateBusinessDaysDiff(cte.dataLimite, config.holidays, config.today);
 
-  if (today > criticalThresholdDate) return 'CRITICO';
-  if (today > limit) return 'FORA_DO_PRAZO';
-  if (diffDays === 0) return 'PRIORIDADE';
-  if (diffDays === 1) return 'VENCE_AMANHA';
+  if (today.getTime() > criticalThresholdDate.getTime()) return 'CRITICO';
+  
+  if (daysDiff === null) return 'NO_PRAZO';
+  if (daysDiff < 0) return 'FORA_DO_PRAZO';
+  if (daysDiff === 0) return 'PRIORIDADE';
+  if (daysDiff === 1) return 'VENCE_AMANHA';
 
   return 'NO_PRAZO';
 };
 
 // Image Compression Utility
-// OPTIMIZATION: 600px width and 0.4 quality balances speed and readability for documents
 export const compressImage = (file: File, maxWidth = 600, quality = 0.4): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -208,8 +218,6 @@ export const compressImage = (file: File, maxWidth = 600, quality = 0.4): Promis
             return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        
-        // Output format as JPEG with quality reduction
         const data = elem.toDataURL('image/jpeg', quality);
         resolve(data);
       };

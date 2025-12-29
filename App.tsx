@@ -18,11 +18,15 @@ interface ErrorBoundaryState {
 }
 
 // Simple Error Boundary Component
+// Fix: Added explicit constructor and destructured props to resolve TypeScript error where 'props' was not found on type 'ErrorBoundary'
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -33,7 +37,10 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
-    if (this.state.hasError) {
+    const { hasError, error } = this.state;
+    const { children } = this.props;
+
+    if (hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
           <div className="max-w-md bg-white p-8 rounded-2xl shadow-xl border border-red-100">
@@ -45,7 +52,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
               O sistema encontrou um erro inesperado. Tente recarregar a página.
             </p>
             <div className="bg-gray-100 p-3 rounded-lg text-left text-xs font-mono text-gray-600 overflow-auto max-h-32 mb-6">
-               {this.state.error?.message || 'Erro desconhecido'}
+               {error?.message || 'Erro desconhecido'}
             </div>
             <button 
               onClick={() => window.location.reload()}
@@ -58,7 +65,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    return this.props.children;
+    return children;
   }
 }
 

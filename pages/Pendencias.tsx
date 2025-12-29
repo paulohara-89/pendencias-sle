@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect, memo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -82,13 +83,12 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
   return (
     <div 
         className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in cursor-pointer"
-        onClick={onClose} // Close on backdrop click
+        onClick={onClose}
     >
         <div 
             className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative animate-scale-in cursor-auto"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+            onClick={(e) => e.stopPropagation()}
         >
-            {/* Close Button - Explicitly positioned */}
             <button 
                 onClick={onClose}
                 className="absolute top-4 right-4 z-50 bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-200"
@@ -97,7 +97,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                 <i className="ph-bold ph-x text-xl"></i>
             </button>
 
-            {/* Left Panel: Details */}
             <div className="w-full md:w-1/3 bg-gray-50 p-6 overflow-y-auto border-r border-gray-100 hidden md:block pt-12 md:pt-6">
                 <div className="mb-6">
                     <h2 className="text-2xl font-bold text-gray-800">{cte.cte}</h2>
@@ -154,7 +153,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     </div>
                 </div>
 
-                {/* Actions */}
                 <div className="mt-8 space-y-3">
                     {cte.status === 'EM BUSCA' ? (
                         <button 
@@ -176,7 +174,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                 </div>
             </div>
 
-            {/* Mobile Header (Only visible on mobile) */}
             <div className="md:hidden p-4 border-b border-gray-100 bg-gray-50 pt-12">
                  <h2 className="text-xl font-bold text-gray-800">{cte.cte}</h2>
                  <p className="text-sm text-gray-500">Série {cte.serie} - {cte.destinatario}</p>
@@ -193,7 +190,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                  </div>
             </div>
 
-            {/* Right Panel: Notes / Chat */}
             <div className="flex-1 flex flex-col bg-white">
                 <div className="p-4 border-b border-gray-100 bg-white z-10 hidden md:block pt-6">
                     <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -221,7 +217,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                                         </div>
                                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{note.text}</p>
                                         
-                                        {/* Image Display */}
                                         {note.imageUrl && (
                                             <div className="mt-3 flex gap-2 flex-wrap">
                                                {note.imageUrl.split(',').map((url, i) => (
@@ -243,7 +238,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     )}
                 </div>
 
-                {/* Input Area */}
                 <div className="p-4 bg-white border-t border-gray-100">
                     {selectedFiles.length > 0 && (
                         <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
@@ -292,32 +286,26 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
-  
-  // Note Filter State: 'all' | 'com_nota' | 'sem_nota'
   const [noteFilter, setNoteFilter] = useState<'all' | 'com_nota' | 'sem_nota'>('all');
 
-  // Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'dataLimite',
-    direction: 'asc' // Default: Oldest limit first
+    direction: 'asc'
   });
 
   const isAdmin = currentUser?.role.toLowerCase() === 'admin';
 
-  // Extract Unique Destination Units
   const destinationUnits = useMemo(() => {
     const units = new Set(ctes.map(c => c.entrega).filter(Boolean));
     return Array.from(units).sort();
   }, [ctes]);
 
-  // Lock unit filter for non-admins
   useEffect(() => {
     if (!isAdmin && currentUser?.linkedDestUnit) {
         setSelectedDestUnit(currentUser.linkedDestUnit);
     }
   }, [currentUser, isAdmin]);
 
-  // Handlers
   const toggleStatusFilter = (item: string) => {
     if (statusFilters.includes(item)) setStatusFilters(statusFilters.filter(i => i !== item));
     else setStatusFilters([...statusFilters, item]);
@@ -338,7 +326,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const filteredData = useMemo(() => {
     let data = ctes;
 
-    // --- UNIVERSAL SEARCH LOGIC ---
     if (filterText.length > 0) {
         const term = filterText.toLowerCase();
         data = data.filter(c => 
@@ -348,9 +335,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             (c.codigo && c.codigo.includes(filterText))
         );
     } else {
-        // --- STANDARD NAVIGATION MODE (No Search) ---
-        
-        // 1. User Role Scope
         if (!isAdmin) {
             data = data.filter(c => 
                 (currentUser.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) ||
@@ -359,7 +343,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             );
         }
 
-        // 2. Mode Filtering
         if (mode === 'critical') {
             data = data.filter(c => c.computedStatus === 'CRITICO');
         } else if (mode === 'search') {
@@ -368,7 +351,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             data = data.filter(c => c.computedStatus !== 'CRITICO');
         }
 
-        // 3. Destination Selector
         if (selectedDestUnit !== 'all') {
             data = data.filter(c => {
                 if (mode === 'search' && !isAdmin) return true;
@@ -376,17 +358,14 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             });
         }
 
-        // 4. Status Filters
         if (statusFilters.length > 0) {
             data = data.filter(c => statusFilters.includes(c.computedStatus || ''));
         }
 
-        // 5. Payment Filter
         if (paymentFilters.length > 0) {
             data = data.filter(c => c.fretePago && paymentFilters.some(pf => c.fretePago.includes(pf)));
         }
 
-        // 6. Note Presence Filter
         if (noteFilter !== 'all') {
             data = data.filter(c => {
                 const hasNote = notes.some(n => n.cteId === c.id);
@@ -395,7 +374,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         }
     }
 
-    // 7. Sorting
     data = [...data].sort((a, b) => {
       let valA: any, valB: any;
 
@@ -456,7 +434,8 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   };
 
   const renderDeadline = (limitDateStr: string) => {
-      const daysDiff = calculateBusinessDaysDiff(limitDateStr, config.holidays);
+      // PASS SYSTEM TODAY FOR CONSISTENT CALCULATION
+      const daysDiff = calculateBusinessDaysDiff(limitDateStr, config.holidays, config.dataHoje);
       if (daysDiff === null) return <span className="text-gray-400">-</span>;
       if (daysDiff < 0) return <span className="text-[10px] font-bold text-red-600 whitespace-nowrap" title="Dias úteis após vencimento">Atrasado {Math.abs(daysDiff)} dias</span>;
       if (daysDiff === 0) return <span className="text-[10px] font-bold text-orange-500 whitespace-nowrap" title="Vence hoje">Vence Hoje</span>;
@@ -475,7 +454,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
      }
   };
 
-  // Render Helper for Sort Arrow
   const SortIcon = ({ colKey }: { colKey: SortKey }) => {
     if (sortConfig.key !== colKey) return <i className="ph-bold ph-caret-up-down text-gray-300 ml-1 text-xs"></i>;
     return <i className={`ph-bold ${sortConfig.direction === 'asc' ? 'ph-caret-up' : 'ph-caret-down'} text-primary ml-1 text-xs`}></i>;
@@ -484,7 +462,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   return (
     <div className="space-y-6 pb-20">
       <div className="glass-panel p-4 rounded-2xl flex flex-col gap-4">
-        {/* Controls Row 1 */}
         <div className="flex flex-col xl:flex-row justify-between items-center gap-4">
             <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
                 <div className="relative w-full md:w-80">
@@ -531,7 +508,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
 
         <div className="h-px bg-gray-100 w-full"></div>
 
-        {/* Controls Row 2: Filters */}
         {!filterText ? (
           <div className="flex flex-col md:flex-row gap-6 animate-fade-in">
               <div className="flex gap-2 flex-wrap items-center">
@@ -564,7 +540,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <button
                             key={status.key}
                             onClick={() => toggleStatusFilter(status.key)}
-                            title={getStatusTooltip(status.key)}
                             className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition border flex items-center gap-1 ${
                                 statusFilters.includes(status.key)
                                 ? 'bg-white text-gray-800 border-gray-300 ring-2 ring-gray-100 shadow-sm' 
@@ -578,7 +553,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 </div>
               )}
 
-              {/* Notes Filter */}
               <div className="flex gap-2 flex-wrap items-center">
                   <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Notas:</span>
                   <button
@@ -611,7 +585,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         )}
       </div>
 
-      {/* TABLE */}
       <div className="hidden md:block glass-panel rounded-2xl overflow-hidden border border-gray-100 shadow-sm overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead className="bg-gray-50/50 text-gray-500 text-xs uppercase tracking-wider font-semibold select-none">
@@ -619,7 +592,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
               <th className="p-5 cursor-pointer hover:bg-gray-100 transition whitespace-nowrap" onClick={() => handleSort('cte')}>
                 <div className="flex items-center">CTE / Série <SortIcon colKey="cte" /></div>
               </th>
-              {/* Recipient Column */}
               <th className="p-5 cursor-pointer hover:bg-gray-100 transition whitespace-nowrap" onClick={() => handleSort('destinatario')}>
                 <div className="flex items-center">Destinatário <SortIcon colKey="destinatario" /></div>
               </th>
@@ -648,7 +620,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     (currentUser.linkedOriginUnit && item.coleta.includes(currentUser.linkedOriginUnit))
                 ) && item.status === 'EM BUSCA';
 
-                // Calculate note count for this item
                 const noteCount = notes.filter(n => n.cteId === item.id).length;
 
                 return (
@@ -694,7 +665,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     <span 
                         className={`cursor-pointer px-2 py-1 rounded border text-[10px] font-bold uppercase hover:opacity-80 ${getPaymentColor(item.fretePago)}`}
                         onClick={() => !filterText && togglePaymentFilter(item.fretePago)}
-                        title={filterText ? "Filtros desativados na busca global" : "Clique para filtrar este tipo"}
                     >
                         {item.fretePago}
                     </span>
@@ -756,7 +726,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 {item.computedStatus?.replace(/_/g, ' ')}
               </span>
             </div>
-            {/* Mobile Recipient Info */}
             <div className="mb-3 px-3 py-2 bg-white rounded-lg border border-gray-100">
                 <p className="text-[10px] uppercase text-gray-400 font-bold mb-0.5">Destinatário</p>
                 <p className="text-sm font-semibold text-gray-800 leading-tight">{item.destinatario}</p>
