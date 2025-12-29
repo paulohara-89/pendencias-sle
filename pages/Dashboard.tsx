@@ -158,8 +158,8 @@ export const Dashboard = () => {
           .filter(d => d.total > 0)
           .sort((a, b) => {
               if (efficiencySort === 'vol') return b.total - a.total; // Biggest Volume
-              if (efficiencySort === 'asc') return a.efficiency - b.efficiency; // Worst Efficiency (Offenders)
-              return b.efficiency - a.efficiency; // Best Efficiency
+              if (efficiencySort === 'asc') return (a.efficiency - b.efficiency) || (b.total - a.total); // Worst Efficiency (Offenders), break ties with volume
+              return (b.efficiency - a.efficiency) || (b.total - a.total); // Best Efficiency
           })
           .slice(0, 15); // LIMIT TO TOP 15 to avoid layout breaking
 
@@ -347,25 +347,32 @@ export const Dashboard = () => {
                      >
                          Melhores
                      </button>
+                     <button 
+                         onClick={() => setEfficiencySort('vol')}
+                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                         title="Mostrar maior volume primeiro"
+                     >
+                         Volume
+                     </button>
                  </div>
               </div>
 
               {/* Chart Container */}
-              <div className="flex-1 w-full relative">
+              <div className="flex-1 w-full relative min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                         layout="vertical"
                         data={efficiencyData}
                         margin={{ top: 5, right: 30, bottom: 5, left: 0 }}
-                        barSize={18}
+                        barSize={20}
                     >
-                        <CartesianGrid stroke="#f3f4f6" horizontal={true} vertical={true} strokeDasharray="3 3" />
+                        <CartesianGrid stroke="#f3f4f6" horizontal={true} vertical={false} strokeDasharray="3 3" />
                         <XAxis type="number" domain={[0, 100]} hide />
                         <YAxis 
                             type="category" 
                             dataKey="name" 
-                            width={140}
-                            tick={{fontSize: 11, fill: '#4b5563', fontWeight: 500}}
+                            width={150}
+                            tick={{fontSize: 11, fill: '#6b7280', fontWeight: 600}}
                             axisLine={false}
                             tickLine={false}
                         />
@@ -375,22 +382,22 @@ export const Dashboard = () => {
                                 if (active && payload && payload.length) {
                                 const data = payload[0].payload;
                                 return (
-                                    <div className="bg-white p-3 rounded-xl shadow-xl border border-gray-100 text-xs">
+                                    <div className="bg-white p-3 rounded-xl shadow-xl border border-gray-100 text-xs z-50">
                                         <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{data.name}</p>
                                         <div className="space-y-1">
-                                            <div className="flex justify-between gap-4">
+                                            <div className="flex justify-between gap-6">
                                                 <span className="text-gray-500">Eficiência:</span>
                                                 <span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span>
                                             </div>
-                                            <div className="flex justify-between gap-4">
+                                            <div className="flex justify-between gap-6">
                                                 <span className="text-gray-500">Volume Total:</span>
                                                 <span className="font-bold text-gray-800">{data.total}</span>
                                             </div>
-                                            <div className="flex justify-between gap-4">
+                                            <div className="flex justify-between gap-6">
                                                 <span className="text-gray-500">No Prazo:</span>
                                                 <span className="font-bold text-green-600">{data.positive}</span>
                                             </div>
-                                            <div className="flex justify-between gap-4">
+                                            <div className="flex justify-between gap-6">
                                                 <span className="text-gray-500">Atrasado/Crítico:</span>
                                                 <span className="font-bold text-red-500">{data.negative}</span>
                                             </div>
@@ -401,7 +408,7 @@ export const Dashboard = () => {
                                 return null;
                             }}
                         />
-                        <Bar dataKey="efficiency" radius={[0, 4, 4, 0]}>
+                        <Bar dataKey="efficiency" radius={[0, 4, 4, 0]} background={{ fill: '#f9fafb', radius: [0, 4, 4, 0] }}>
                              {efficiencyData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={getEfficiencyColor(entry.efficiency)} />
                              ))}
