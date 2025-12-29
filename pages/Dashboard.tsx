@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, 
-  PieChart, Pie, Sector, CartesianGrid, Legend, ComposedChart, Line, ReferenceLine
+  PieChart, Pie, Sector, CartesianGrid
 } from 'recharts';
 
 interface AgencyMetric {
@@ -131,7 +131,7 @@ export const Dashboard = () => {
           if (!rawKey) return;
           
           // Clean key name for chart display - keep shorter for X-Axis
-          const key = rawKey.length > 15 ? rawKey.substring(0, 15) + '...' : rawKey;
+          const key = rawKey.length > 25 ? rawKey.substring(0, 25) + '...' : rawKey;
           
           if (!groups[key]) groups[key] = { positive: 0, negative: 0, total: 0 };
           
@@ -160,7 +160,8 @@ export const Dashboard = () => {
               if (efficiencySort === 'vol') return b.total - a.total; // Biggest Volume
               if (efficiencySort === 'asc') return a.efficiency - b.efficiency; // Worst Efficiency (Offenders)
               return b.efficiency - a.efficiency; // Best Efficiency
-          });
+          })
+          .slice(0, 15); // LIMIT TO TOP 15 to avoid layout breaking
 
   }, [filteredCtes, selectedDestUnit, efficiencySort]);
 
@@ -220,6 +221,13 @@ export const Dashboard = () => {
     );
   };
 
+  // Color logic for efficiency bars
+  const getEfficiencyColor = (value: number) => {
+      if (value >= 90) return '#10b981'; // Green
+      if (value >= 70) return '#f59e0b'; // Orange
+      return '#ef4444'; // Red
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-20 max-w-[1800px] mx-auto">
       
@@ -261,7 +269,7 @@ export const Dashboard = () => {
                    <button
                      key={type}
                      onClick={() => toggleFilter(type, paymentFilters, setPaymentFilters)}
-                     className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition border whitespace-nowrap ${
+                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border whitespace-nowrap ${
                        paymentFilters.includes(type)
                        ? 'bg-primary text-white border-primary shadow-sm' 
                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'
@@ -312,15 +320,15 @@ export const Dashboard = () => {
       {/* MAIN ANALYTICS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Efficiency Composed Chart with Scrollable Container */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-              <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          {/* Efficiency Chart - Vertical Layout */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[500px]">
+              <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shrink-0">
                  <div>
                     <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                         <i className="ph-fill ph-ranking text-primary"></i> Ranking de Eficiência
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
-                        Volume total (Barras) e % Eficiência (Linha).
+                        Top 15 unidades/agências baseadas na % de entregas no prazo.
                     </p>
                  </div>
                  
@@ -328,7 +336,7 @@ export const Dashboard = () => {
                      <button 
                          onClick={() => setEfficiencySort('asc')}
                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                         title="Mostrar piores primeiro (Foco em Ofensores)"
+                         title="Mostrar piores primeiro (Ofensores)"
                      >
                          Ofensores
                      </button>
@@ -339,63 +347,79 @@ export const Dashboard = () => {
                      >
                          Melhores
                      </button>
-                     <button 
-                         onClick={() => setEfficiencySort('vol')}
-                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                     >
-                         Volume
-                     </button>
                  </div>
               </div>
 
-              {/* Scrollable Container */}
-              <div className="flex-1 w-full overflow-x-auto pb-4 no-scrollbar">
-                <div style={{ width: efficiencyData.length > 8 ? `${Math.max(100, efficiencyData.length * (isMobile ? 50 : 80))}%` : '100%', minWidth: '600px', height: '400px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart
-                            data={efficiencyData}
-                            margin={{ top: 20, right: 20, bottom: 20, left: 0 }}
-                        >
-                            <CartesianGrid stroke="#f3f4f6" vertical={false} strokeDasharray="3 3" />
-                            <XAxis 
-                                dataKey="name" 
-                                axisLine={false} 
-                                tickLine={false} 
-                                tick={{fontSize: 11, fill: '#6b7280'}}
-                                interval={0}
-                                angle={-30}
-                                textAnchor="end"
-                                height={60}
-                            />
-                            <YAxis yAxisId="left" orientation="left" stroke="#9ca3af" fontSize={10} axisLine={false} tickLine={false} />
-                            <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" fontSize={10} unit="%" domain={[0, 100]} axisLine={false} tickLine={false} />
-                            <Tooltip 
-                                cursor={{ fill: 'rgba(0,0,0,0.02)' }}
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                                labelStyle={{ fontWeight: 'bold', color: '#111827' }}
-                            />
-                            <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                            
-                            <Bar yAxisId="left" dataKey="positive" name="No Prazo" stackId="a" fill="#10b981" barSize={isMobile ? 20 : 30} radius={[0,0,0,0]} />
-                            <Bar yAxisId="left" dataKey="negative" name="Crítico/Atrasado" stackId="a" fill="#ef4444" barSize={isMobile ? 20 : 30} radius={[4,4,0,0]} />
-                            
-                            <Line yAxisId="right" type="monotone" dataKey="efficiency" name="Eficiência %" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6}} />
-                            <ReferenceLine yAxisId="right" y={95} stroke="green" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: 'green', fontSize: 10 }} />
-                        </ComposedChart>
-                    </ResponsiveContainer>
-                </div>
+              {/* Chart Container */}
+              <div className="flex-1 w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                        layout="vertical"
+                        data={efficiencyData}
+                        margin={{ top: 5, right: 30, bottom: 5, left: 0 }}
+                        barSize={18}
+                    >
+                        <CartesianGrid stroke="#f3f4f6" horizontal={true} vertical={true} strokeDasharray="3 3" />
+                        <XAxis type="number" domain={[0, 100]} hide />
+                        <YAxis 
+                            type="category" 
+                            dataKey="name" 
+                            width={140}
+                            tick={{fontSize: 11, fill: '#4b5563', fontWeight: 500}}
+                            axisLine={false}
+                            tickLine={false}
+                        />
+                        <Tooltip 
+                            cursor={{ fill: 'rgba(0,0,0,0.02)' }}
+                            content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                    <div className="bg-white p-3 rounded-xl shadow-xl border border-gray-100 text-xs">
+                                        <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{data.name}</p>
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-gray-500">Eficiência:</span>
+                                                <span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span>
+                                            </div>
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-gray-500">Volume Total:</span>
+                                                <span className="font-bold text-gray-800">{data.total}</span>
+                                            </div>
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-gray-500">No Prazo:</span>
+                                                <span className="font-bold text-green-600">{data.positive}</span>
+                                            </div>
+                                            <div className="flex justify-between gap-4">
+                                                <span className="text-gray-500">Atrasado/Crítico:</span>
+                                                <span className="font-bold text-red-500">{data.negative}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                                }
+                                return null;
+                            }}
+                        />
+                        <Bar dataKey="efficiency" radius={[0, 4, 4, 0]}>
+                             {efficiencyData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={getEfficiencyColor(entry.efficiency)} />
+                             ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
               </div>
           </div>
 
           {/* Status Distribution (Donut) */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-full">
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[500px]">
                 <div className="mb-4">
                    <h3 className="font-bold text-lg text-gray-800">Status Global</h3>
                    <p className="text-xs text-gray-500">Distribuição percentual da carteira.</p>
                 </div>
 
-                <div className="flex-1 flex items-center justify-center relative min-h-[250px]">
-                    <ResponsiveContainer width="100%" height={280}>
+                <div className="flex-1 flex items-center justify-center relative">
+                    <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                         <Pie
                             activeIndex={activeIndex}
@@ -403,8 +427,8 @@ export const Dashboard = () => {
                             data={statusData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
+                            innerRadius={70}
+                            outerRadius={90}
                             fill="#8884d8"
                             dataKey="value"
                             onMouseEnter={onPieEnter}
