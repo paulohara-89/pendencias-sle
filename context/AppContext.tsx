@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useRef } from 'react';
 import { CTE, User, Note, ConfigData, AppState, Profile } from '../types';
 import { fetchAllData, postDataToScript } from '../services/api';
 import { calculateStatus, parseDate, parseDateTime } from '../utils';
@@ -62,7 +62,7 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     }
   });
 
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const origins = useMemo(() => {
     const list = new Set(state.ctes.map(c => c.coleta).filter(Boolean));
