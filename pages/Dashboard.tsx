@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, 
-  PieChart, Pie, Sector, CartesianGrid, Legend, ReferenceLine
+  PieChart, Pie, Sector, CartesianGrid, Legend, ComposedChart, Line, ReferenceLine
 } from 'recharts';
 
 interface AgencyMetric {
@@ -130,8 +130,8 @@ export const Dashboard = () => {
           const rawKey = c[groupByKey];
           if (!rawKey) return;
           
-          // Clean key name for chart display
-          const key = rawKey.length > 20 ? rawKey.substring(0, 20) + '...' : rawKey;
+          // Clean key name for chart display - keep shorter for X-Axis
+          const key = rawKey.length > 15 ? rawKey.substring(0, 15) + '...' : rawKey;
           
           if (!groups[key]) groups[key] = { positive: 0, negative: 0, total: 0 };
           
@@ -160,8 +160,7 @@ export const Dashboard = () => {
               if (efficiencySort === 'vol') return b.total - a.total; // Biggest Volume
               if (efficiencySort === 'asc') return a.efficiency - b.efficiency; // Worst Efficiency (Offenders)
               return b.efficiency - a.efficiency; // Best Efficiency
-          })
-          .slice(0, 15); // Top 15 units
+          });
 
   }, [filteredCtes, selectedDestUnit, efficiencySort]);
 
@@ -313,19 +312,19 @@ export const Dashboard = () => {
       {/* MAIN ANALYTICS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Efficiency Bar Chart (Horizontal) */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+          {/* Efficiency Composed Chart with Scrollable Container */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
               <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                  <div>
                     <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                         <i className="ph-fill ph-ranking text-primary"></i> Ranking de Eficiência
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
-                        Percentual de entregas "No Prazo" vs "Atrasadas".
+                        Volume total (Barras) e % Eficiência (Linha).
                     </p>
                  </div>
                  
-                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-xl self-start">
+                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-xl self-start flex-wrap">
                      <button 
                          onClick={() => setEfficiencySort('asc')}
                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
@@ -349,58 +348,42 @@ export const Dashboard = () => {
                  </div>
               </div>
 
-              {/* Responsive Container with Dynamic Height */}
-              <div className="flex-1 w-full" style={{ minHeight: `${Math.max(350, efficiencyData.length * 40)}px` }}>
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                        layout="vertical"
-                        data={efficiencyData}
-                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                    >
-                        <CartesianGrid stroke="#f3f4f6" horizontal={false} vertical={true} strokeDasharray="3 3" />
-                        <XAxis type="number" domain={[0, 100]} hide />
-                        <YAxis 
-                            dataKey="name" 
-                            type="category" 
-                            width={isMobile ? 120 : 180} 
-                            tick={{fontSize: 11, fill: '#4b5563', fontWeight: 500}}
-                            interval={0}
-                        />
-                        <Tooltip 
-                            cursor={{ fill: 'rgba(0,0,0,0.02)' }}
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                            formatter={(value: number, name: string, props: any) => {
-                                if (name === 'efficiency') return [`${value}%`, 'Eficiência'];
-                                return [value, name];
-                            }}
-                            content={({ active, payload }) => {
-                                if (active && payload && payload.length) {
-                                    const data = payload[0].payload;
-                                    return (
-                                        <div className="bg-white p-3 rounded-xl shadow-lg border border-gray-100">
-                                            <p className="font-bold text-gray-800 mb-2">{data.name}</p>
-                                            <div className="space-y-1 text-xs">
-                                                <div className="flex justify-between gap-4"><span className="text-gray-500">Volume Total:</span> <span className="font-bold">{data.total}</span></div>
-                                                <div className="flex justify-between gap-4"><span className="text-green-600">No Prazo:</span> <span className="font-bold">{data.positive}</span></div>
-                                                <div className="flex justify-between gap-4"><span className="text-red-500">Crítico/Atraso:</span> <span className="font-bold">{data.negative}</span></div>
-                                                <div className="pt-2 border-t border-gray-100 mt-2 flex justify-between gap-4">
-                                                    <span className="font-bold text-primary">Eficiência:</span> 
-                                                    <span className={`font-bold ${data.efficiency >= 80 ? 'text-green-600' : data.efficiency < 50 ? 'text-red-600' : 'text-yellow-600'}`}>{data.efficiency}%</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-                                return null;
-                            }}
-                        />
-                        <Bar dataKey="efficiency" barSize={isMobile ? 18 : 24} radius={[0, 4, 4, 0]} background={{ fill: '#f9fafb' }}>
-                            {efficiencyData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.efficiency >= 80 ? '#10b981' : entry.efficiency >= 50 ? '#f59e0b' : '#ef4444'} />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
+              {/* Scrollable Container */}
+              <div className="flex-1 w-full overflow-x-auto pb-4 no-scrollbar">
+                <div style={{ width: efficiencyData.length > 8 ? `${Math.max(100, efficiencyData.length * (isMobile ? 50 : 80))}%` : '100%', minWidth: '600px', height: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart
+                            data={efficiencyData}
+                            margin={{ top: 20, right: 20, bottom: 20, left: 0 }}
+                        >
+                            <CartesianGrid stroke="#f3f4f6" vertical={false} strokeDasharray="3 3" />
+                            <XAxis 
+                                dataKey="name" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{fontSize: 11, fill: '#6b7280'}}
+                                interval={0}
+                                angle={-30}
+                                textAnchor="end"
+                                height={60}
+                            />
+                            <YAxis yAxisId="left" orientation="left" stroke="#9ca3af" fontSize={10} axisLine={false} tickLine={false} />
+                            <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" fontSize={10} unit="%" domain={[0, 100]} axisLine={false} tickLine={false} />
+                            <Tooltip 
+                                cursor={{ fill: 'rgba(0,0,0,0.02)' }}
+                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                labelStyle={{ fontWeight: 'bold', color: '#111827' }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                            
+                            <Bar yAxisId="left" dataKey="positive" name="No Prazo" stackId="a" fill="#10b981" barSize={isMobile ? 20 : 30} radius={[0,0,0,0]} />
+                            <Bar yAxisId="left" dataKey="negative" name="Crítico/Atrasado" stackId="a" fill="#ef4444" barSize={isMobile ? 20 : 30} radius={[4,4,0,0]} />
+                            
+                            <Line yAxisId="right" type="monotone" dataKey="efficiency" name="Eficiência %" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6}} />
+                            <ReferenceLine yAxisId="right" y={95} stroke="green" strokeDasharray="3 3" label={{ position: 'right', value: 'Meta', fill: 'green', fontSize: 10 }} />
+                        </ComposedChart>
+                    </ResponsiveContainer>
+                </div>
               </div>
           </div>
 
