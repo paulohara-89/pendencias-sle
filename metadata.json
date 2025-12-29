@@ -1,0 +1,8 @@
+{
+  "name": "São Luiz Express - Controle de Pendências",
+  "description": "Sistema de gestão logística e controle de prazos de CTEs com integração Google Sheets.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
