@@ -14,30 +14,17 @@ export const parseDate = (dateStr: string): Date | null => {
   return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
 };
 
-/**
- * Formata links do Drive para visualização direta. 
- * Extrai o ID de qualquer formato de link do Google Drive.
- */
 export const formatImageUrl = (url: string, useThumbnail: boolean = true): string => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
-    
-    // Regex melhorada para extrair ID do Drive (file/d/ID ou id=ID)
     const idMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
     const id = idMatch ? idMatch[1] : null;
 
     if (id) {
-        // Thumbnail é muito mais confiável para visualização dentro de <img> sem autorização direta
-        if (useThumbnail) {
-            return `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
-        }
+        if (useThumbnail) return `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
         return `https://drive.google.com/uc?export=view&id=${id}`;
     }
-    
-    // Se não for link do drive mas for uma URL, retorna ela
-    if (trimmed.startsWith('http')) return trimmed;
-    
-    return '';
+    return trimmed.startsWith('http') ? trimmed : '';
 };
 
 export const parseDateTime = (dateStr: string): number => {
@@ -46,14 +33,10 @@ export const parseDateTime = (dateStr: string): number => {
         const parts = dateStr.split(' '); 
         const datePart = parts[0];
         const timePart = parts[1] || '00:00';
-        
         const [d, m, y] = datePart.split('/').map(Number);
         const [hh, mm] = timePart.split(':').map(Number);
-        
         return new Date(y, m - 1, d, hh, mm).getTime();
-    } catch (e) {
-        return 0;
-    }
+    } catch (e) { return 0; }
 };
 
 export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], referenceDate?: Date | string): number | null => {
@@ -85,6 +68,7 @@ export const getStatusColor = (status: string) => {
     case 'PRIORIDADE': return 'bg-orange-500 text-white border border-orange-600';
     case 'VENCE_AMANHA': return 'bg-yellow-400 text-yellow-900 border border-yellow-500';
     case 'NO_PRAZO': return 'bg-cyan-500 text-white border border-cyan-600';
+    case 'LOCALIZADA': case 'MERCADORIA LOCALIZADA': return 'bg-green-600 text-white border border-green-700';
     default: return 'bg-gray-200 text-gray-700';
   }
 };
@@ -101,8 +85,6 @@ export const getPaymentColor = (type: string) => {
 export const calculateStatus = (cte: CTE, config: { today: Date, limitDays: number, holidays: string[] }): CTE['computedStatus'] => {
   const limitDate = parseDate(cte.dataLimite);
   if (!limitDate) return 'NO_PRAZO';
-  const today = new Date(config.today);
-  today.setHours(0,0,0,0);
   const daysDiff = calculateBusinessDaysDiff(cte.dataLimite, config.holidays, config.today);
   if (daysDiff !== null && daysDiff < -config.limitDays) return 'CRITICO';
   if (daysDiff === null) return 'NO_PRAZO';

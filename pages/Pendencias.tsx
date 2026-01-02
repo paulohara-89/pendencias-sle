@@ -6,7 +6,6 @@ import { getStatusColor, getPaymentColor, parseDate, calculateBusinessDaysDiff, 
 import { CTE, Note } from '../types';
 import * as XLSX from 'xlsx';
 
-// Sorting Types
 type SortKey = 'cte' | 'dataEmissao' | 'dataLimite' | 'status' | 'origem' | 'destino' | 'pagamento' | 'destinatario';
 type SortDirection = 'asc' | 'desc';
 
@@ -23,15 +22,11 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
     .sort((a, b) => parseDateTime(a.date) - parseDateTime(b.date));
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [cteNotes]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setSelectedFiles(Array.from(e.target.files));
-    }
+    if (e.target.files) setSelectedFiles(Array.from(e.target.files));
   };
 
   const handleSendNote = async () => {
@@ -39,43 +34,30 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
     setIsSubmitting(true);
     const imagesBase64: string[] = [];
     for (const file of selectedFiles) {
-        try {
-            const base64 = await compressImage(file);
-            imagesBase64.push(base64);
-        } catch (e) {
-            console.error("Compression failed", e);
-        }
+        try { const base64 = await compressImage(file); imagesBase64.push(base64); } 
+        catch (e) { console.error("Compression failed", e); }
     }
     const success = await addNote(cte.id, newNote, imagesBase64);
     if (success) {
         setNewNote('');
         setSelectedFiles([]);
-        setTimeout(() => {
-            if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }, 100);
-        addToast('Tratativa salva com sucesso', 'success');
-    } else {
-        addToast('Erro ao salvar tratativa', 'error');
-    }
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+        addToast('Tratativa salva!', 'success');
+    } else addToast('Erro ao salvar!', 'error');
     setIsSubmitting(false);
   };
 
   const handleMarkSearch = async () => {
       if(!confirm('Deseja marcar como EM BUSCA?')) return;
       setIsSubmitting(true);
-      const success = await markAsInSearch(cte.id);
-      if(success) addToast('Mercadoria em busca!', 'success');
+      if(await markAsInSearch(cte.id)) addToast('Em busca!', 'success');
       setIsSubmitting(false);
   };
 
   const handleResolve = async () => {
-      if(!confirm('Confirmar localização da mercadoria?')) return;
+      if(!confirm('Confirmar localização?')) return;
       setIsSubmitting(true);
-      const success = await resolveSearch(cte.id);
-      if(success) {
-          addToast('Resolvido com sucesso!', 'success');
-          onClose(); 
-      }
+      if(await resolveSearch(cte.id)) { addToast('Resolvido!', 'success'); onClose(); }
       setIsSubmitting(false);
   };
 
@@ -84,11 +66,12 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in cursor-pointer" onClick={onClose}>
         <div className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative animate-scale-in cursor-auto" onClick={(e) => e.stopPropagation()}>
-            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-200" title="Fechar"><i className="ph-bold ph-x text-xl"></i></button>
+            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-200"><i className="ph-bold ph-x text-xl"></i></button>
+            
             <div className="w-full md:w-1/3 bg-gray-50 p-6 overflow-y-auto border-r border-gray-100 hidden md:block pt-12 md:pt-6">
                 <div className="mb-6"><h2 className="text-2xl font-bold text-gray-800 tracking-tighter">{cte.cte}</h2><p className="text-sm text-gray-500 font-medium">Série {cte.serie}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <span className={`px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${getStatusColor(cte.computedStatus || 'NO_PRAZO')}`}>{cte.computedStatus?.replace(/_/g, ' ')}</span>
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${getStatusColor(cte.status === 'EM BUSCA' ? 'CRITICO' : (cte.computedStatus || 'NO_PRAZO'))}`}>{cte.status === 'EM BUSCA' ? 'EM BUSCA' : cte.computedStatus?.replace(/_/g, ' ')}</span>
                         <span className={`px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${getPaymentColor(cte.fretePago)}`}>{cte.fretePago}</span>
                     </div>
                 </div>
@@ -101,15 +84,8 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                             <div><p className="font-bold text-gray-800">{cte.entrega}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Destino</p></div>
                         </div>
                     </div>
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Prazos</p>
-                        <div className="flex justify-between"><span>Emissão:</span><span className="font-medium">{cte.dataEmissao}</span></div>
-                        <div className="flex justify-between mt-1"><span>Limite:</span><span className="font-bold text-red-600">{cte.dataLimite}</span></div>
-                    </div>
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Cliente</p>
-                        <p className="font-medium text-gray-800 break-words leading-snug">{cte.destinatario}</p>
-                    </div>
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Prazos</p><div className="flex justify-between"><span>Emissão:</span><span className="font-medium">{cte.dataEmissao}</span></div><div className="flex justify-between mt-1"><span>Limite:</span><span className="font-bold text-red-600">{cte.dataLimite}</span></div></div>
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Cliente</p><p className="font-medium text-gray-800 break-words leading-snug">{cte.destinatario}</p></div>
                 </div>
                 <div className="mt-8 space-y-3">
                     {cte.status === 'EM BUSCA' ? (<button onClick={handleResolve} disabled={isSubmitting} className="w-full py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2"><i className="ph-bold ph-check-circle text-lg"></i> LOCALIZADA</button>) : isResolved ? (<div className="w-full py-4 bg-green-50 text-green-700 border border-green-200 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 shadow-inner"><i className="ph-fill ph-check-circle text-lg"></i> LOCALIZADA</div>) : (<button onClick={handleMarkSearch} disabled={isSubmitting} className="w-full py-4 bg-purple-100 text-purple-700 border border-purple-200 rounded-2xl font-black uppercase text-xs hover:bg-purple-200 transition flex items-center justify-center gap-2"><i className="ph-bold ph-binoculars text-lg"></i> MARCAR BUSCA</button>)}
@@ -117,70 +93,24 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
             </div>
             
             <div className="flex-1 flex flex-col bg-white overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6 flex items-center gap-2">
-                   <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-text text-xl"></i></div>
-                   <h3 className="font-bold text-gray-800">Histórico de Tratativas</h3>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-4 space-y-8 bg-[#F8F9FC] custom-scrollbar" ref={scrollRef}>
-                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Nenhuma tratativa registrada.</p></div>) : (
+                <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6 flex items-center gap-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-text text-xl"></i></div><h3 className="font-bold text-gray-800 text-sm">Tratativas e Evidências</h3></div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[#F8F9FC] custom-scrollbar" ref={scrollRef}>
+                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Sem tratativas.</p></div>) : (
                         cteNotes.map(note => {
                             const isMe = currentUser?.username === note.user;
                             const isSearchNote = note.statusBusca || note.text.toUpperCase().includes('BUSCA') || note.text.toUpperCase().includes('LOCALIZADA');
-                            
                             return (
                               <div key={note.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 shadow-sm relative border-2 ${isSearchNote ? 'border-purple-200 bg-purple-50/50' : (isMe ? 'bg-white border-indigo-100' : 'bg-white border-gray-100')}`}>
-                                  <div className="flex justify-between items-center gap-4 mb-2">
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isSearchNote ? 'text-purple-700' : (isMe ? 'text-indigo-600' : 'text-primary')}`}>
-                                        {isSearchNote && <i className="ph-fill ph-warning-circle mr-1"></i>}
-                                        {note.user}
-                                    </span>
-                                    <span className="text-[10px] text-gray-400 font-bold">{note.date}</span>
-                                  </div>
+                                <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm border-2 ${isSearchNote ? 'border-purple-200 bg-purple-50/50' : (isMe ? 'bg-white border-indigo-100' : 'bg-white border-gray-100')}`}>
+                                  <div className="flex justify-between items-center gap-4 mb-1"><span className={`text-[10px] font-black uppercase tracking-widest ${isSearchNote ? 'text-purple-700' : (isMe ? 'text-indigo-600' : 'text-primary')}`}>{note.user}</span><span className="text-[10px] text-gray-400 font-bold">{note.date}</span></div>
                                   <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isSearchNote ? 'text-purple-900 font-semibold' : 'text-gray-800'}`}>{note.text}</p>
-                                  
                                   {note.imageUrl && (
-                                    <div className="mt-4 flex gap-3 flex-wrap">
-                                      {note.imageUrl.split(',')
-                                        .map(url => url.trim())
-                                        .filter(url => url.length > 0)
-                                        .map((url, i) => {
-                                          const thumbUrl = formatImageUrl(url, true);
-                                          const fullUrl = formatImageUrl(url, false);
-                                          
-                                          return (
-                                            <div key={i} className="flex flex-col gap-1 group">
-                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="block relative overflow-hidden rounded-xl border-2 border-white shadow-md bg-gray-100 w-32 h-32 flex items-center justify-center">
-                                                <img 
-                                                  src={thumbUrl} 
-                                                  alt="evidência" 
-                                                  className="w-full h-full object-cover group-hover:scale-110 transition duration-500" 
-                                                  onError={(e) => {
-                                                    const img = e.target as HTMLImageElement;
-                                                    // Fallback 1: Tenta link direto se thumb falhar
-                                                    if (!img.src.includes('uc?')) {
-                                                        img.src = fullUrl;
-                                                    } else {
-                                                        // Fallback Final: Ícone de Erro Amigável
-                                                        img.parentElement!.classList.add('bg-gray-200');
-                                                        img.style.display = 'none';
-                                                        const span = document.createElement('span');
-                                                        span.className = 'text-[10px] font-black text-gray-400 uppercase text-center p-2';
-                                                        span.innerText = 'Ver Original';
-                                                        img.parentElement!.appendChild(span);
-                                                    }
-                                                  }}
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                                   <i className="ph-bold ph-magnifying-glass-plus text-white text-2xl"></i>
-                                                </div>
-                                              </a>
-                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-center font-black text-gray-400 hover:text-primary transition uppercase tracking-tighter py-1">Abrir Link</a>
-                                            </div>
-                                          );
-                                        })
-                                      }
+                                    <div className="mt-3 flex gap-2 flex-wrap">
+                                      {note.imageUrl.split(',').map(url => url.trim()).filter(Boolean).map((url, i) => (
+                                        <a key={i} href={formatImageUrl(url, false)} target="_blank" rel="noopener noreferrer" className="block relative rounded-lg overflow-hidden border border-gray-200 w-20 h-20 bg-gray-100">
+                                            <img src={formatImageUrl(url, true)} className="w-full h-full object-cover" onError={(e) => (e.target as HTMLImageElement).src = formatImageUrl(url, false)} />
+                                        </a>
+                                      ))}
                                     </div>
                                   )}
                                 </div>
@@ -189,32 +119,11 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                         })
                     )}
                 </div>
-                
                 <div className="p-4 bg-white border-t border-gray-100">
                     <div className="flex gap-2 items-center">
-                        <label className="flex items-center gap-2 px-3 py-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200 transition-colors shadow-sm">
-                            <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} />
-                            <i className="ph-bold ph-camera text-xl"></i>
-                        </label>
-                        <div className="flex-1 relative">
-                            <input 
-                                type="text" 
-                                value={newNote} 
-                                onChange={e => setNewNote(e.target.value)} 
-                                placeholder="Digite uma nota..." 
-                                className="w-full pl-4 pr-12 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all outline-none font-medium text-sm" 
-                                onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}
-                            />
-                            <button 
-                                onClick={handleSendNote} 
-                                disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} 
-                                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2.5 rounded-xl transition shadow-md flex items-center justify-center ${(!newNote.trim() && selectedFiles.length === 0) ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white hover:bg-accent'}`}
-                            >
-                                <i className="ph-bold ph-paper-plane-right"></i>
-                            </button>
-                        </div>
+                        <label className="p-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200 transition-colors"><input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} /><i className="ph-bold ph-camera text-xl"></i></label>
+                        <div className="flex-1 relative"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Digite uma nota..." className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none" onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}/><button onClick={handleSendNote} disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} className={`absolute right-1 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition ${(!newNote.trim() && selectedFiles.length === 0) ? 'text-gray-300' : 'bg-primary text-white shadow-sm'}`}><i className="ph-bold ph-paper-plane-right"></i></button></div>
                     </div>
-                    {selectedFiles.length > 0 && <div className="mt-2 text-[10px] font-bold text-indigo-600 ml-2 animate-pulse">{selectedFiles.length} arquivo(s) prontos para envio</div>}
                 </div>
             </div>
         </div>
@@ -223,86 +132,127 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
 };
 
 export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }) => {
-  const { ctes, notes, currentUser, config, setSelectedCteId } = useApp();
+  const { ctes, notes, currentUser, setSelectedCteId } = useApp();
   const [filterText, setFilterText] = useState('');
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
+  const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
+  const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
+  const [noteFilter, setNoteFilter] = useState<'all' | 'with' | 'without'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'dataLimite', direction: 'asc' });
+
+  // Handle sorting for the pendencies list
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
 
   const role = currentUser?.role.toLowerCase();
   const isAdmin = role === 'admin';
   const isGlobalUser = isAdmin || role === 'leitor' || (!currentUser?.linkedOriginUnit && !currentUser?.linkedDestUnit);
 
-  const destinationUnits = useMemo(() => {
-    const units = new Set(ctes.map(c => c.entrega).filter(Boolean));
-    return Array.from(units).sort();
-  }, [ctes]);
+  const destinationUnits = useMemo(() => Array.from(new Set(ctes.map(c => c.entrega).filter(Boolean))).sort(), [ctes]);
 
   useEffect(() => {
-    if (!isGlobalUser && currentUser?.linkedDestUnit) {
-        setSelectedDestUnit(currentUser.linkedDestUnit);
-    }
+    if (!isGlobalUser && currentUser?.linkedDestUnit) setSelectedDestUnit(currentUser.linkedDestUnit);
   }, [currentUser, isGlobalUser]);
 
-  const handleSort = (key: SortKey) => {
-    setSortConfig(current => ({
-      key,
-      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-    }));
+  const togglePaymentFilter = (type: string) => {
+    setPaymentFilters(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
   };
 
   const filteredData = useMemo(() => {
     let data = ctes;
-    if (filterText.length > 0) {
+    
+    // 1. Filtro de Texto
+    if (filterText) {
         const term = filterText.toLowerCase();
-        data = data.filter(c => c.cte.includes(filterText) || c.serie.includes(filterText) || (c.destinatario && c.destinatario.toLowerCase().includes(term)));
-    } else {
-        if (!isGlobalUser) {
-            data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
-        }
-        if (mode === 'critical') data = data.filter(c => c.computedStatus === 'CRITICO');
-        else if (mode === 'search') data = data.filter(c => c.status === 'EM BUSCA');
-        else data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
-
-        if (selectedDestUnit !== 'all') data = data.filter(c => c.entrega === selectedDestUnit);
+        data = data.filter(c => c.cte.includes(term) || c.serie.includes(term) || c.destinatario?.toLowerCase().includes(term));
     }
 
-    data = [...data].sort((a, b) => {
+    // 2. Filtro de Escopo de Unidade
+    if (!isGlobalUser && !filterText) {
+        data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
+    }
+
+    // 3. Filtros de Modo (Críticos / Busca)
+    if (mode === 'critical') data = data.filter(c => c.computedStatus === 'CRITICO' || c.status === 'EM BUSCA');
+    else if (mode === 'search') data = data.filter(c => c.status === 'EM BUSCA');
+    else data = data.filter(c => c.status !== 'EM BUSCA');
+
+    // 4. Filtro de Unidade Destino (Dropdown)
+    if (selectedDestUnit !== 'all') data = data.filter(c => c.entrega === selectedDestUnit);
+
+    // 5. Filtro de Fluxo (Chegada / Saída)
+    if (flowFilter !== 'all' && currentUser?.linkedDestUnit) {
+        if (flowFilter === 'inbound') data = data.filter(c => c.entrega === currentUser.linkedDestUnit);
+        else data = data.filter(c => c.coleta === currentUser.linkedDestUnit);
+    }
+
+    // 6. Filtro de Pagamento (CIF, FOB, etc)
+    if (paymentFilters.length > 0) {
+        data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
+    }
+
+    // 7. Filtro de Notas (Com/Sem)
+    if (noteFilter !== 'all') {
+        data = data.filter(c => {
+            const hasNotes = notes.some(n => n.cteId === c.id);
+            return noteFilter === 'with' ? hasNotes : !hasNotes;
+        });
+    }
+
+    return [...data].sort((a, b) => {
       let valA: any, valB: any;
-      switch (sortConfig.key) {
-        case 'cte': valA = parseInt(a.cte) || 0; valB = parseInt(b.cte) || 0; break;
-        case 'dataLimite': valA = parseDate(a.dataLimite)?.getTime() || 0; valB = parseDate(b.dataLimite)?.getTime() || 0; break;
-        default: return 0;
-      }
+      if (sortConfig.key === 'cte') { valA = parseInt(a.cte) || 0; valB = parseInt(b.cte) || 0; }
+      else { valA = parseDate(a.dataLimite)?.getTime() || 0; valB = parseDate(b.dataLimite)?.getTime() || 0; }
       return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
     });
-    return data;
-  }, [ctes, mode, filterText, currentUser, selectedDestUnit, isGlobalUser, sortConfig]);
-
-  const SortIcon = ({ colKey }: { colKey: SortKey }) => {
-    if (sortConfig.key !== colKey) return <i className="ph-bold ph-caret-up-down text-gray-300 ml-1 text-xs"></i>;
-    return <i className={`ph-bold ${sortConfig.direction === 'asc' ? 'ph-caret-up' : 'ph-caret-down'} text-primary ml-1 text-xs`}></i>;
-  };
+  }, [ctes, mode, filterText, currentUser, selectedDestUnit, isGlobalUser, sortConfig, flowFilter, paymentFilters, noteFilter, notes]);
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="glass-panel p-4 rounded-3xl flex flex-col gap-4 border border-white/50">
-        <div className="flex flex-col xl:flex-row justify-between items-center gap-4">
-            <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
-                <div className="relative w-full md:w-80"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Filtre por CTE ou Cliente..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white shadow-inner outline-none focus:border-primary/40 transition" /></div>
-                {!filterText && (<div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-3 py-3 shadow-inner w-full md:w-auto">{isGlobalUser ? (<select className="bg-transparent text-xs font-black uppercase tracking-tighter text-gray-700 w-full md:w-48 outline-none" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}><option value="all">TODAS AS UNIDADES</option>{destinationUnits.map(unit => (<option key={unit} value={unit}>{unit}</option>))}</select>) : (<span className="font-black text-gray-800 text-xs px-2 uppercase tracking-tighter">{currentUser?.linkedDestUnit || 'TODAS AS UNIDADES'}</span>)}</div>)}
+      <div className="glass-panel p-5 rounded-3xl space-y-4 border border-white/50 shadow-sm">
+        <div className="flex flex-col xl:flex-row justify-between items-stretch gap-4">
+            <div className="flex flex-col md:flex-row items-stretch gap-3 flex-1">
+                <div className="relative flex-1 md:max-w-md"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Filtre por CTE ou Cliente..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" /></div>
+                
+                {isGlobalUser ? (
+                    <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}>
+                        <option value="all">TODAS AS UNIDADES</option>
+                        {destinationUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                    </select>
+                ) : (
+                    <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={flowFilter} onChange={(e) => setFlowFilter(e.target.value as any)}>
+                        <option value="all">FLUXO: TODOS</option>
+                        <option value="inbound">CHEGADA (DESTINO)</option>
+                        <option value="outbound">SAÍDA (ORIGEM)</option>
+                    </select>
+                )}
             </div>
-            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filteredData); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Dados"); XLSX.writeFile(wb, `Relatorio_${mode}.xlsx`); }} className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-black uppercase text-xs rounded-2xl hover:bg-green-600 transition shadow-lg shadow-green-200"><i className="ph-bold ph-download"></i> EXPORTAR</button>
+            
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                {['CIF', 'FOB', 'REMETENTE', 'DEST'].map(type => (
+                    <button key={type} onClick={() => togglePaymentFilter(type)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${paymentFilters.includes(type) ? 'bg-primary text-white border-primary shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>{type}</button>
+                ))}
+                <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                <button onClick={() => setNoteFilter(noteFilter === 'with' ? 'without' : noteFilter === 'without' ? 'all' : 'with')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${noteFilter !== 'all' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-100'}`}>
+                    {noteFilter === 'with' ? 'Com Notas' : noteFilter === 'without' ? 'Sem Notas' : 'Notas: Todas'}
+                </button>
+            </div>
         </div>
       </div>
       
-      <div className="hidden md:block glass-panel rounded-3xl overflow-hidden shadow-sm overflow-x-auto border border-white/50">
-        <table className="w-full text-left min-w-[1000px]">
+      <div className="hidden md:block glass-panel rounded-3xl overflow-hidden border border-white/50 shadow-sm overflow-x-auto">
+        <table className="w-full text-left min-w-[1100px]">
           <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase font-black tracking-widest border-b border-gray-100">
             <tr>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('cte')}>CTE / SÉRIE <SortIcon colKey="cte" /></th>
+              <th className="p-5 cursor-pointer" onClick={() => handleSort('cte')}>CTE / SÉRIE <i className="ph ph-caret-up-down"></i></th>
               <th className="p-5">DESTINATÁRIO</th>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('dataLimite')}>PRAZO / LIMITE <SortIcon colKey="dataLimite" /></th>
-              <th className="p-5">STATUS</th>
+              <th className="p-5 cursor-pointer" onClick={() => handleSort('dataLimite')}>PRAZO / LIMITE <i className="ph ph-caret-up-down"></i></th>
+              <th className="p-5">STATUS / PAGAMENTO</th>
+              <th className="p-5">ORIGEM / DESTINO</th>
               <th className="p-5 text-right">AÇÕES</th>
             </tr>
           </thead>
@@ -312,21 +262,19 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 return (
                     <tr key={item.id} className="hover:bg-white transition group">
                         <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
-                        <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[250px]">{item.destinatario}</td>
+                        <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[200px]">{item.destinatario}</td>
                         <td className="p-5 text-sm font-bold text-gray-900">{item.dataLimite}</td>
                         <td className="p-5">
-                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>
-                                {item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}
-                            </span>
+                            <div className="flex flex-col gap-1.5 items-start">
+                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+                                <span className={`px-2.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
+                            </div>
                         </td>
+                        <td className="p-5 text-[10px] font-bold text-gray-500"><div className="flex items-center gap-1.5"><span className="truncate max-w-[100px]">{item.coleta}</span><i className="ph-bold ph-arrow-right text-indigo-300"></i><span className="truncate max-w-[100px] text-gray-700">{item.entrega}</span></div></td>
                         <td className="p-5 text-right">
-                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-12 h-12 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center mx-auto hover:rotate-6">
-                                <i className="ph-bold ph-chat-circle-dots text-xl"></i>
-                                {noteCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-sm">
-                                        {noteCount}
-                                    </span>
-                                )}
+                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-11 h-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-100 flex items-center justify-center ml-auto hover:rotate-3">
+                                <i className="ph-bold ph-chat-circle-dots text-lg"></i>
+                                {noteCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md">{noteCount}</span>}
                             </button>
                         </td>
                     </tr>
@@ -336,26 +284,23 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         </table>
       </div>
       
-      {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
         {filteredData.map(item => {
             const noteCount = notes.filter(n => n.cteId === item.id).length;
             return (
                 <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100" onClick={() => setSelectedCteId(item.id)}>
                     <div className="flex justify-between items-start mb-3">
-                        <div><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">CTE / SÉRIE</p><h4 className="font-black text-primary text-lg">{item.cte} / {item.serie}</h4></div>
-                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+                        <div><p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-0.5">CTE / SÉRIE</p><h4 className="font-black text-primary text-lg leading-tight">{item.cte} / {item.serie}</h4></div>
+                        <div className="flex flex-col items-end gap-1">
+                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
+                        </div>
                     </div>
-                    <div className="mb-4"><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">DESTINATÁRIO</p><p className="text-sm font-medium text-gray-700 truncate">{item.destinatario}</p></div>
-                    <div className="flex justify-between items-center">
-                        <div className="flex flex-col"><span className="text-[10px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div>
-                        <div className="relative w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                            <i className="ph-bold ph-arrow-right"></i>
-                            {noteCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">
-                                    {noteCount}
-                                </span>
-                            )}
+                    <div className="mb-4 text-xs font-bold text-gray-700"><p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-0.5">ORIGEM &rarr; DESTINO</p>{item.coleta} &rarr; {item.entrega}</div>
+                    <div className="flex justify-between items-end"><div className="flex flex-col"><span className="text-[9px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div>
+                        <div className="relative w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                            <i className="ph-bold ph-chat-circle-dots text-xl"></i>
+                            {noteCount > 0 && <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">{noteCount}</span>}
                         </div>
                     </div>
                 </div>

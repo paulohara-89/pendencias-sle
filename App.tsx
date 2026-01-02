@@ -1,3 +1,4 @@
+
 import React, { ReactNode, ErrorInfo } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
@@ -20,29 +21,28 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary: A robust class component to catch JS errors in children.
  */
-// Fix: Use explicit generic types to ensure 'this.props' and 'this.state' are correctly typed.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Initializing state directly as a property and removed the redundant constructor to prevent inheritance confusion.
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
+  // Fix: Explicitly defining state and using standard React.Component structure to ensure props and state are correctly typed.
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  // Fix: Corrected the lifecycle method name from 'componentCatch' to 'componentDidCatch'.
+  // Fix: Corrected lifecycle method and ensured it handles errors properly.
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 
   render() {
-    // Fix: Accessing state and props via 'this' which are now properly identified through standard React.Component inheritance.
-    const { hasError, error } = this.state;
-    const { children } = this.props;
-
-    if (hasError) {
+    // Fix: Using this.state and this.props directly to resolve inference issues in certain TS environments.
+    if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
           <div className="max-w-md bg-white p-8 rounded-2xl shadow-xl border border-red-100">
@@ -54,7 +54,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
               O sistema encontrou um erro inesperado. Tente recarregar a página.
             </p>
             <div className="bg-gray-100 p-3 rounded-lg text-left text-xs font-mono text-gray-600 overflow-auto max-h-32 mb-6">
-               {error?.message || 'Erro desconhecido'}
+               {this.state.error?.message || 'Erro desconhecido'}
             </div>
             <button 
               onClick={() => window.location.reload()}
@@ -67,7 +67,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    return children;
+    return this.props.children;
   }
 }
 
