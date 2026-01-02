@@ -17,6 +17,8 @@ interface NotificationItem {
     colorClass: string;
     icon: string;
     isSearch?: boolean;
+    sender?: string;
+    isExternal?: boolean;
 }
 
 export const Layout = ({ children }: React.PropsWithChildren) => {
@@ -125,18 +127,22 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         }
     });
 
-    // Interações de Notas
-    const recentNotes = [...notes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date)).slice(0, 20);
+    const recentNotes = [...notes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date)).slice(0, 30);
     recentNotes.forEach(n => {
         const relevantCte = ctes.find(c => c.id === n.cteId);
-        if (relevantCte && n.user !== currentUser.username) {
+        if (relevantCte) {
             const isUserInvolved = isGlobalUser || 
                 (currentUser.linkedDestUnit && relevantCte.entrega.includes(currentUser.linkedDestUnit)) ||
                 (currentUser.linkedOriginUnit && relevantCte.coleta.includes(currentUser.linkedOriginUnit));
             
             if (!isUserInvolved) return;
 
+            const isMe = n.user === currentUser.username;
             const isNoteSearch = n.statusBusca || n.text.toUpperCase().includes('BUSCA') || n.text.toUpperCase().includes('LOCALIZADA');
+            
+            // --- COR DINÂMICA NO SINO ---
+            // Vermelho para outros usuários, Azul para você
+            const statusColor = isMe ? 'bg-primary' : 'bg-red-600';
 
             list.push({ 
                 id: `MSG-${n.id}`,
@@ -145,8 +151,10 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                 text: `${n.user}: ${n.text.substring(0, 40)}${n.text.length > 40 ? '...' : ''} (CTE ${relevantCte.cte})`, 
                 cteId: n.cteId,
                 sortDate: parseDateTime(n.date),
-                colorClass: isNoteSearch ? 'bg-purple-500 text-white' : 'bg-indigo-600 text-white shadow-indigo-200',
-                icon: isNoteSearch ? 'ph-binoculars' : 'ph-chat-circle-dots'
+                colorClass: `${statusColor} text-white shadow-lg`,
+                icon: isNoteSearch ? 'ph-binoculars' : 'ph-chat-circle-dots',
+                sender: n.user,
+                isExternal: !isMe
             });
         }
     });
@@ -168,7 +176,7 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         }
     }
     prevIdsRef.current = currentIds;
-  }, [notifications]);
+  }, [notifications, readNotificationIds]);
 
   const unreadCount = notifications.filter(n => !readNotificationIds.includes(n.id)).length;
 
@@ -211,7 +219,9 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                       <i className={`ph-fill ${latestNotification.icon} text-2xl`}></i>
                   </div>
                   <div className="flex-1">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Atenção!</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">
+                        {latestNotification.isExternal ? 'Nova Resposta!' : 'Atenção!'}
+                      </p>
                       <p className="text-sm font-bold text-gray-800 leading-tight">{latestNotification.text}</p>
                       <p className="text-[10px] text-primary mt-2 font-bold underline">Toque para ver detalhes</p>
                   </div>

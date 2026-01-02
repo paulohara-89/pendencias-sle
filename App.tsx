@@ -1,4 +1,5 @@
-import React, { ReactNode, ErrorInfo, Component } from 'react';
+
+import React, { Component, ReactNode, ErrorInfo } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -20,16 +21,15 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary: A robust class component to catch JS errors in children.
  */
-// Use Component directly to improve type inference for this.state and this.props
+// Fix: Use explicit Component import from 'react' to ensure props/state generics are correctly mapped to the instance.
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare state property to ensure TypeScript recognizes it on the class instance
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
-
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    // Correctly initialize state on the typed instance
+    this.state = {
+      hasError: false,
+      error: null
+    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -42,7 +42,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Explicitly using this.state and this.props which are now properly typed
+    // Accessing this.state is now safe as ErrorBoundary correctly extends Component<P, S>
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
@@ -68,6 +68,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       );
     }
 
+    // Accessing this.props.children is now safe as the props type is correctly inherited
     return this.props.children;
   }
 }

@@ -135,7 +135,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const { ctes, notes, currentUser, setSelectedCteId } = useApp();
   const [filterText, setFilterText] = useState('');
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
-  const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('inbound'); // Prioriza Chegada
+  const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('inbound'); 
   const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
   const [noteFilter, setNoteFilter] = useState<'all' | 'with' | 'without'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'dataLimite', direction: 'asc' });
@@ -161,52 +161,48 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const filteredData = useMemo(() => {
     let data = ctes;
     
-    // --- BUSCA GLOBAL (Prioridade Máxima) ---
-    // Se houver texto de busca, ignora todos os outros filtros (exceto modo)
+    // --- BUSCA GLOBAL ---
     if (filterText) {
         const term = filterText.toLowerCase();
         data = data.filter(c => 
             c.cte.includes(term) || 
             c.serie.includes(term) || 
-            c.destinatario?.toLowerCase().includes(term) ||
-            c.id.toLowerCase().includes(term)
+            c.destinatario?.toLowerCase().includes(term)
         );
     } else {
-        // 1. Filtro de Escopo de Unidade (Apenas se não for busca global)
-        if (!isGlobalUser) {
-            data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
-        }
-
-        // 2. Filtro de Unidade Destino (Dropdown)
+        // 1. Filtro de Unidade Destino
         if (selectedDestUnit !== 'all') {
             data = data.filter(c => c.entrega === selectedDestUnit);
         }
 
-        // 3. Filtro de Fluxo (Chegada / Saída)
-        // Correção da lógica para não zerar a lista
-        if (flowFilter !== 'all') {
-            const myUnit = currentUser?.linkedDestUnit || currentUser?.linkedOriginUnit;
-            if (myUnit) {
-                if (flowFilter === 'inbound') data = data.filter(c => c.entrega.includes(myUnit));
-                else data = data.filter(c => c.coleta.includes(myUnit));
+        // 2. Filtro de Fluxo (Correção da tela em branco)
+        if (!isGlobalUser && flowFilter !== 'all') {
+            const myDest = currentUser?.linkedDestUnit;
+            const myOrigin = currentUser?.linkedOriginUnit;
+            
+            if (flowFilter === 'inbound') {
+                if (myDest) data = data.filter(c => c.entrega === myDest);
+            } else if (flowFilter === 'outbound') {
+                // Filtra pela coluna de ORIGEM (COLETA) conforme requisito do Sheets Coluna H
+                if (myOrigin) data = data.filter(c => c.coleta.includes(myOrigin));
             }
         }
     }
 
-    // --- SEGREGAÇÃO DE STATUS (Sempre aplicado) ---
+    // --- SEGREGAÇÃO ABSOLUTA DE STATUS ---
     if (mode === 'critical') {
-        // Apenas itens Críticos ou em Busca
-        data = data.filter(c => c.computedStatus === 'CRITICO' || c.status === 'EM BUSCA');
+        // Aba Críticos: EXCLUSIVAMENTE CRITICO (Exclui Em Busca)
+        data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
     } else if (mode === 'search') {
-        // Apenas em busca
+        // Aba Em Busca: EXCLUSIVAMENTE EM BUSCA
         data = data.filter(c => c.status === 'EM BUSCA');
     } else {
-        // Aba Pendências: FORA_DO_PRAZO, PRIORIDADE, VENCE_AMANHA, NO_PRAZO. 
-        // EXCLUI Críticos e Em Busca.
+        // Aba Pendências: NO_PRAZO, VENCE_AMANHA, PRIORIDADE, FORA_DO_PRAZO. 
+        // EXCLUI Críticos e EXCLUI Em Busca.
         data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
     }
 
-    // 4. Filtro de Pagamento
+    // 4. Filtros de Pagamento
     if (paymentFilters.length > 0) {
         data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
     }
@@ -278,7 +274,16 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
           </thead>
           <tbody className="divide-y divide-gray-50 bg-white/50 backdrop-blur-sm">
             {filteredData.map(item => {
-                const noteCount = notes.filter(n => n.cteId === item.id).length;
+                const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
+                const noteCount = cteNotes.length;
+                
+                // --- LÓGICA DE COR DA NOTIFICAÇÃO ---
+                // Se a última nota foi feita por outra pessoa (interação externa) -> Vermelho
+                // Caso contrário (você foi o último) -> Azul padrão
+                const lastNote = cteNotes[0];
+                const isExternal = lastNote && lastNote.user !== currentUser?.username;
+                const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
+
                 return (
                     <tr key={item.id} className="hover:bg-white transition group">
                         <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
@@ -299,7 +304,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <td className="p-5 text-right">
                             <button onClick={() => setSelectedCteId(item.id)} className="relative w-11 h-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-100 flex items-center justify-center ml-auto hover:rotate-3">
                                 <i className="ph-bold ph-chat-circle-dots text-lg"></i>
-                                {noteCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md">{noteCount}</span>}
+                                {noteCount > 0 && <span className={`absolute -top-1.5 -right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md animate-pulse ${badgeColorClass}`}>{noteCount}</span>}
                             </button>
                         </td>
                     </tr>
@@ -311,7 +316,12 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
       
       <div className="md:hidden space-y-4">
         {filteredData.map(item => {
-            const noteCount = notes.filter(n => n.cteId === item.id).length;
+            const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
+            const noteCount = cteNotes.length;
+            const lastNote = cteNotes[0];
+            const isExternal = lastNote && lastNote.user !== currentUser?.username;
+            const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
+
             return (
                 <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100" onClick={() => setSelectedCteId(item.id)}>
                     <div className="flex justify-between items-start mb-3">
@@ -325,7 +335,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     <div className="flex justify-between items-end"><div className="flex flex-col"><span className="text-[9px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div>
                         <div className="relative w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
                             <i className="ph-bold ph-chat-circle-dots text-xl"></i>
-                            {noteCount > 0 && <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">{noteCount}</span>}
+                            {noteCount > 0 && <span className={`absolute -top-1 -right-1 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white animate-pulse ${badgeColorClass}`}>{noteCount}</span>}
                         </div>
                     </div>
                 </div>
