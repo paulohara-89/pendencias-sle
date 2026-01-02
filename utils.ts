@@ -16,6 +16,28 @@ export const parseDate = (dateStr: string): Date | null => {
   return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
 };
 
+// Transform Google Drive links to direct view links for <img> tags
+export const formatImageUrl = (url: string): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    
+    // If it's a standard Google Drive sharing link
+    if (trimmed.includes('drive.google.com') && (trimmed.includes('/file/d/') || trimmed.includes('id='))) {
+        let id = '';
+        if (trimmed.includes('/file/d/')) {
+            id = trimmed.split('/file/d/')[1].split('/')[0].split('?')[0];
+        } else if (trimmed.includes('id=')) {
+            id = trimmed.split('id=')[1].split('&')[0];
+        }
+        
+        if (id) {
+            return `https://drive.google.com/uc?export=view&id=${id}`;
+        }
+    }
+    
+    return trimmed;
+};
+
 // New Helper: Parse DD/MM/YYYY HH:mm:ss for sorting
 export const parseDateTime = (dateStr: string): number => {
     if (!dateStr || typeof dateStr !== 'string') return 0;
@@ -193,7 +215,7 @@ export const calculateStatus = (cte: CTE, config: { today: Date, limitDays: numb
 };
 
 // Image Compression Utility
-export const compressImage = (file: File, maxWidth = 600, quality = 0.4): Promise<string> => {
+export const compressImage = (file: File, maxWidth = 800, quality = 0.6): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);

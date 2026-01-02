@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect, memo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { getStatusColor, getPaymentColor, parseDate, calculateBusinessDaysDiff, compressImage, parseDateTime } from '../utils';
+import { getStatusColor, getPaymentColor, parseDate, calculateBusinessDaysDiff, compressImage, parseDateTime, formatImageUrl } from '../utils';
 import { CTE, Note } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -219,11 +219,23 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                                         
                                         {note.imageUrl && (
                                             <div className="mt-3 flex gap-2 flex-wrap">
-                                               {note.imageUrl.split(',').map((url, i) => (
-                                                   <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                                       <img src={url} alt="anexo" className="w-24 h-24 rounded-lg border border-gray-200 object-cover hover:opacity-90 transition" />
+                                               {note.imageUrl.split(',')
+                                                .map(url => url.trim())
+                                                .filter(url => url.length > 0)
+                                                .map((url, i) => {
+                                                   const formattedUrl = formatImageUrl(url);
+                                                   return (
+                                                   <a key={i} href={formattedUrl} target="_blank" rel="noopener noreferrer">
+                                                       <img 
+                                                         src={formattedUrl} 
+                                                         alt="anexo" 
+                                                         className="w-24 h-24 rounded-lg border border-gray-200 object-cover hover:opacity-90 transition bg-white" 
+                                                         onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = "https://placehold.co/100x100?text=Erro+Imagem";
+                                                         }}
+                                                       />
                                                    </a>
-                                               ))}
+                                               )})}
                                             </div>
                                         )}
                                         {note.statusBusca && (

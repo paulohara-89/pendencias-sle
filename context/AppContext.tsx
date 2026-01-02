@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useRef } from 'react';
 import { CTE, User, Note, ConfigData, AppState, Profile } from '../types';
 import { fetchAllData, postDataToScript } from '../services/api';
@@ -233,7 +234,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     if (!state.currentUser) return false;
 
     const targetCte = state.ctes.find(c => c.id === cteId);
-    // CRITICAL: Extract CODIGO to ensure it is saved in the sheet (Column D usually)
     const { cte, serie, codigo } = extractCteInfo(cteId, targetCte);
 
     // Upload Images
@@ -243,20 +243,25 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
             const cleanBase64 = imgBase64.includes(',') ? imgBase64.split(',')[1] : imgBase64;
             const mimeType = imgBase64.includes(';') ? imgBase64.split(';')[0].split(':')[1] : 'image/jpeg';
             const response = await postDataToScript('uploadImage', { data: cleanBase64, mimeType: mimeType });
-            if (response && (response.success || response.url || (response.data && response.data.url))) {
-                return response.url || response.viewUrl || (response.data && response.data.url);
+            
+            // Handle various return formats from AppScript
+            if (response) {
+                if (response.url) return response.url;
+                if (response.viewUrl) return response.viewUrl;
+                if (response.data && response.data.url) return response.data.url;
+                if (response.data && response.data.viewUrl) return response.data.viewUrl;
             }
             return null;
         } catch (e) { return null; }
     });
     const uploadedResults = await Promise.all(uploadPromises);
-    const validUrls = uploadedResults.filter(url => typeof url === 'string' && url.length > 0);
+    const validUrls = uploadedResults.filter(url => typeof url === 'string' && url.trim().length > 0);
     let finalImageUrl = validUrls.join(',');
 
     if (!finalImageUrl && state.notes.length > 0) {
         const previousNoteWithImage = state.notes
             .filter(n => n.cteId === cteId && n.imageUrl && n.imageUrl.trim() !== '')
-            .sort((a, b) => parseDateTime(b.date) - parseDateTime(a.date))[0]; // Use Date sort here too
+            .sort((a, b) => parseDateTime(b.date) - parseDateTime(a.date))[0];
         if (previousNoteWithImage) finalImageUrl = previousNoteWithImage.imageUrl || '';
     }
 
@@ -264,8 +269,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     const now = new Date();
     const dateStr = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
 
-    // DETERMINE IF WE SHOULD TARGET PROCESS_CONTROL
-    // Rule: If explicitly marking as search, OR if the item is ALREADY in search mode, use PROCESS_CONTROL.
     const isCurrentlyEmBusca = targetCte?.status === 'EM BUSCA';
     const forceProcessControl = isSearch || isCurrentlyEmBusca || customStatus === 'MERCADORIA LOCALIZADA';
 
@@ -283,14 +286,13 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     setState(prev => ({ 
         ...prev, 
         notes: [newNote, ...prev.notes], // Add to TOP
-        // If status is "MERCADORIA LOCALIZADA", update CTE immediately locally
         ctes: prev.ctes.map(c => c.id === cteId ? { ...c, status: statusToSend || c.status } : c)
     }));
 
     const payload = {
         cte: cte, 
         serie: serie,
-        codigo: codigo, // Include Codigo for Column Correctness
+        codigo: codigo,
         CODIGO: codigo,
         cteNumber: cte,
         user: state.currentUser.username,
@@ -300,13 +302,13 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
         link: finalImageUrl,
         url: finalImageUrl,
         link_imagem: finalImageUrl, 
-        LINK_IMAGEM: finalImageUrl, // Critical for PROCESS_CONTROL
+        LINK_IMAGEM: finalImageUrl,
         linkImagem: finalImageUrl,
         LinkImagem: finalImageUrl,
-        markInSearch: forceProcessControl, // Force backend to write to PROCESS_CONTROL
-        sheet: forceProcessControl ? 'PROCESS_CONTROL' : 'NOTES', // Explicit Hint
+        markInSearch: forceProcessControl,
+        sheet: forceProcessControl ? 'PROCESS_CONTROL' : 'NOTES',
         status: statusToSend,
-        STATUS: statusToSend // Uppercase just in case
+        STATUS: statusToSend
     };
     
     const res = await postDataToScript('addNote', payload);
@@ -327,7 +329,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
          notes: prev.notes.map(n => n.cteId === cteId ? { ...n, statusBusca: false } : n) 
      }));
 
-     // Also send the stopAlarm but rely on addNote(MERCADORIA LOCALIZADA) for the record
      const res = await postDataToScript('stopAlarm', { cte: cte });
      return res && res.success;
   };

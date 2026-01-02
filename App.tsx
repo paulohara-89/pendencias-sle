@@ -18,13 +18,11 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Simple Error Boundary Component
-// Fix: Added explicit constructor and destructured props to resolve TypeScript error where 'props' was not found on type 'ErrorBoundary'
-// Using named import Component to ensure proper resolution of generic state and props members
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fixed ErrorBoundary: Explicitly extending React.Component and using this.state/this.props to ensure TypeScript correctly resolves inherited members.
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Initialize state properly
+    // Initialize state
     this.state = {
       hasError: false,
       error: null
@@ -40,7 +38,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Destructure state and props from this, ensuring they are recognized by TS
+    // Access state and props via 'this' to ensure type resolution
     const { hasError, error } = this.state;
     const { children } = this.props;
 
