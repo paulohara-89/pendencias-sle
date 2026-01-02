@@ -16,6 +16,7 @@ interface NotificationItem {
     sortDate: number;
     colorClass: string;
     icon: string;
+    isSearch?: boolean;
 }
 
 export const Layout = ({ children }: React.PropsWithChildren) => {
@@ -31,7 +32,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
 
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
 
-  // Carregar lidas do localStorage
   useEffect(() => {
     if (currentUser) {
         const storageKey = `read_notifications_${currentUser.username}`;
@@ -44,7 +44,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
     }
   }, [currentUser?.username]);
 
-  // Salvar lidas
   useEffect(() => {
     if (currentUser) {
         const storageKey = `read_notifications_${currentUser.username}`;
@@ -92,7 +91,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
     const list: NotificationItem[] = [];
     const now = new Date().getTime();
 
-    // 1. Notificações de Status
     ctes.forEach(c => {
         const isRelevant = isGlobalUser || 
                            (currentUser.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) ||
@@ -105,11 +103,12 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                 id: `BUSCA-${c.id}`,
                 type: 'BUSCA', 
                 date: null, 
-                text: `MERCADORIA EM BUSCA: CTE ${c.cte}`, 
+                text: `EM BUSCA: CTE ${c.cte} série ${c.serie}`, 
                 cteId: c.id, 
-                sortDate: now + 5000, // Garantir que fiquem no topo
-                colorClass: 'bg-purple-600 text-white',
-                icon: 'ph-binoculars'
+                sortDate: now + 5000,
+                colorClass: 'bg-purple-600 text-white shadow-purple-200',
+                icon: 'ph-binoculars',
+                isSearch: true
             });
         } 
         else if (c.computedStatus === 'CRITICO') {
@@ -120,65 +119,56 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                 text: `CTE ${c.cte} com prazo estourado (Crítico).`, 
                 cteId: c.id, 
                 sortDate: now + 1000,
-                colorClass: 'bg-red-500 text-white',
+                colorClass: 'bg-red-600 text-white shadow-red-200',
                 icon: 'ph-siren'
             });
         }
     });
 
-    // 2. Notificações de Interações (Novas Mensagens)
-    // Ordenar todas as notas por data para pegar as mais recentes primeiro
-    const sortedNotes = [...notes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
-    
-    sortedNotes.forEach(n => {
+    // Interações de Notas
+    const recentNotes = [...notes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date)).slice(0, 20);
+    recentNotes.forEach(n => {
         const relevantCte = ctes.find(c => c.id === n.cteId);
-        if (!relevantCte) return;
+        if (relevantCte && n.user !== currentUser.username) {
+            const isUserInvolved = isGlobalUser || 
+                (currentUser.linkedDestUnit && relevantCte.entrega.includes(currentUser.linkedDestUnit)) ||
+                (currentUser.linkedOriginUnit && relevantCte.coleta.includes(currentUser.linkedOriginUnit));
+            
+            if (!isUserInvolved) return;
 
-        // Só notificar se a mensagem não for do próprio usuário
-        if (n.user === currentUser.username) return;
+            const isNoteSearch = n.statusBusca || n.text.toUpperCase().includes('BUSCA') || n.text.toUpperCase().includes('LOCALIZADA');
 
-        const isUserInvolved = isGlobalUser || 
-            (currentUser.linkedDestUnit && relevantCte.entrega.includes(currentUser.linkedDestUnit)) ||
-            (currentUser.linkedOriginUnit && relevantCte.coleta.includes(currentUser.linkedOriginUnit));
-        
-        if (!isUserInvolved) return;
-
-        list.push({ 
-            id: `MSG-${n.id}`,
-            type: 'MSG', 
-            date: n.date, 
-            text: `${n.user} comentou no CTE ${relevantCte.cte}`, 
-            cteId: n.cteId,
-            sortDate: parseDateTime(n.date),
-            colorClass: 'bg-indigo-600 text-white',
-            icon: 'ph-chat-circle-dots'
-        });
+            list.push({ 
+                id: `MSG-${n.id}`,
+                type: 'MSG', 
+                date: n.date, 
+                text: `${n.user}: ${n.text.substring(0, 40)}${n.text.length > 40 ? '...' : ''} (CTE ${relevantCte.cte})`, 
+                cteId: n.cteId,
+                sortDate: parseDateTime(n.date),
+                colorClass: isNoteSearch ? 'bg-purple-500 text-white' : 'bg-indigo-600 text-white shadow-indigo-200',
+                icon: isNoteSearch ? 'ph-binoculars' : 'ph-chat-circle-dots'
+            });
+        }
     });
 
-    // Remover duplicidade de IDs e ordenar por data
     const uniqueList = Array.from(new Map(list.map(item => [item.id, item])).values());
     return uniqueList.sort((a, b) => b.sortDate - a.sortDate).slice(0, 40);
   }, [ctes, notes, currentUser, isGlobalUser]);
 
-  // Detector de novas notificações (comparando IDs)
   useEffect(() => {
     const currentIds = new Set(notifications.map(n => n.id));
     if (prevIdsRef.current.size > 0) {
-        // Encontrar as notificações que são novas na lista E que ainda não foram marcadas como lidas
-        const newItems = notifications.filter(n => !prevIdsRef.current.has(n.id) && !readNotificationIds.includes(n.id));
-        
-        if (newItems.length > 0) {
-            const newest = newItems[0];
+        const newNotifs = notifications.filter(n => !prevIdsRef.current.has(n.id) && !readNotificationIds.includes(n.id));
+        if (newNotifs.length > 0) {
+            const newest = newNotifs[0];
             setLatestNotification(newest);
             setShowToast(true);
-            
-            // Auto-hide toast após 8 segundos
             const timer = setTimeout(() => setShowToast(false), 8000);
             return () => clearTimeout(timer);
         }
     }
     prevIdsRef.current = currentIds;
-  }, [notifications, readNotificationIds]);
+  }, [notifications]);
 
   const unreadCount = notifications.filter(n => !readNotificationIds.includes(n.id)).length;
 
@@ -202,7 +192,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
   return (
     <div className="flex h-screen bg-background text-primary overflow-hidden font-sans relative">
       
-      {/* Sistema de Toasts (Alertas Laterais) */}
       <div className="fixed top-4 right-4 z-[10000] flex flex-col gap-2">
         {toasts.map(toast => (
           <div key={toast.id} className={`min-w-[300px] p-4 rounded-xl shadow-xl flex items-center justify-between animate-slide-in-right bg-white border-l-4 ${toast.type === 'success' ? 'border-green-500 text-green-800' : toast.type === 'error' ? 'border-red-500 text-red-800' : 'border-blue-500 text-blue-800'}`}>
@@ -215,7 +204,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         ))}
       </div>
 
-      {/* Pop-up de Nova Notificação (Sistema de Mensagens) */}
       {showToast && latestNotification && (
           <div className="fixed top-20 right-6 z-[9999] animate-slide-in-right cursor-pointer group" onClick={() => handleNotificationClick(latestNotification.cteId, latestNotification.id)}>
               <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 max-w-sm flex items-start gap-4 ring-2 ring-primary/5 hover:scale-[1.02] transition">
@@ -223,9 +211,9 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                       <i className={`ph-fill ${latestNotification.icon} text-2xl`}></i>
                   </div>
                   <div className="flex-1">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Interação Recente</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Atenção!</p>
                       <p className="text-sm font-bold text-gray-800 leading-tight">{latestNotification.text}</p>
-                      <p className="text-[10px] text-primary mt-2 font-bold underline">Toque para visualizar</p>
+                      <p className="text-[10px] text-primary mt-2 font-bold underline">Toque para ver detalhes</p>
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); setShowToast(false); }} className="text-gray-300 hover:text-red-500"><i className="ph-bold ph-x"></i></button>
               </div>
@@ -235,7 +223,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
       {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} username={currentUser.username} />}
       {selectedCte && <DetailModal cte={selectedCte} onClose={() => setSelectedCteId(null)} />}
 
-      {/* Alerta de "EM BUSCA" Crítico */}
       {alertActive && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-red-900/95 backdrop-blur-md animate-fade-in">
           <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-lg text-center border-t-8 border-red-600 animate-bounce-in relative overflow-hidden">
@@ -259,7 +246,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         </div>
       )}
 
-      {/* Sidebar Desktop */}
       <aside className={`hidden md:flex flex-col w-64 glass-panel m-4 rounded-2xl border border-white/50`}>
         <div className="p-6 border-b border-gray-100">
            <h1 className="text-xl font-bold text-primary tracking-tight flex items-center gap-2">
@@ -307,7 +293,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
            </div>
            
            <div className="flex items-center gap-6">
-             {/* Sino de Notificações */}
              <div className="relative cursor-pointer group" ref={notifRef}>
                <div className={`p-2 rounded-full transition ${isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
                  <i className={`text-2xl ${isNotifOpen ? 'ph-fill ph-bell' : 'ph-light ph-bell'}`}></i>
@@ -316,24 +301,24 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
                {isNotifOpen && (
                  <div className="absolute right-0 top-12 w-80 md:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in origin-top-right z-50">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                        <div className="flex items-center gap-2"><h3 className="font-bold text-gray-800 text-sm">Central de Notificações</h3><span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-bold">{unreadCount}</span></div>
-                        {unreadCount > 0 && <button onClick={() => { const allIds = notifications.map(n => n.id); setReadNotificationIds(prev => Array.from(new Set([...prev, ...allIds]))); }} className="text-[10px] font-bold text-primary hover:underline">Marcar tudo como lido</button>}
+                        <div className="flex items-center gap-2"><h3 className="font-bold text-gray-800">Notificações</h3><span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{unreadCount}</span></div>
+                        {unreadCount > 0 && <button onClick={() => { const allIds = notifications.map(n => n.id); setReadNotificationIds(prev => Array.from(new Set([...prev, ...allIds]))); }} className="text-[10px] font-bold text-primary hover:underline">Limpar todas</button>}
                     </div>
                     <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
                         {notifications.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400 flex flex-col items-center"><i className="ph-duotone ph-bell-slash text-3xl mb-2 opacity-50"></i><p className="text-sm">Nenhuma notificação por enquanto.</p></div>
+                            <div className="p-8 text-center text-gray-400 flex flex-col items-center"><i className="ph-duotone ph-bell-slash text-3xl mb-2 opacity-50"></i><p className="text-sm">Tudo em dia.</p></div>
                         ) : (
                             <div className="divide-y divide-gray-50">
                                 {notifications.map((item, idx) => {
                                     const isRead = readNotificationIds.includes(item.id);
                                     return (
-                                        <div key={idx} onClick={() => handleNotificationClick(item.cteId, item.id)} className={`p-4 hover:bg-indigo-50/40 transition cursor-pointer flex gap-3 group ${isRead ? 'opacity-50 grayscale-[0.5]' : 'bg-blue-50/20'}`}>
-                                            <div className={`mt-1 w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${item.colorClass}`}>
-                                                <i className={`text-lg ph-fill ${item.icon}`}></i>
+                                        <div key={idx} onClick={() => handleNotificationClick(item.cteId, item.id)} className={`p-4 hover:bg-indigo-50/30 transition cursor-pointer flex gap-3 group ${isRead ? 'opacity-40 bg-white' : 'bg-blue-50/20'}`}>
+                                            <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${item.colorClass}`}>
+                                                <i className={`text-sm ph-fill ${item.icon}`}></i>
                                             </div>
                                             <div className="flex-1">
                                                 <p className={`text-sm font-bold leading-tight ${isRead ? 'text-gray-500' : 'text-gray-900'}`}>{item.text}</p>
-                                                <div className="flex justify-between items-center mt-1.5"><span className="text-[9px] font-black uppercase tracking-tighter text-gray-400">{item.type}</span>{item.date && <span className="text-[9px] text-gray-400 font-medium">{item.date}</span>}</div>
+                                                <div className="flex justify-between items-center mt-1"><span className="text-[9px] font-black uppercase tracking-tighter text-gray-400">{item.type}</span>{item.date && <span className="text-[9px] text-gray-400 font-bold">{item.date}</span>}</div>
                                             </div>
                                             {!isRead && <div className="w-2 h-2 bg-red-500 rounded-full mt-2 shrink-0"></div>}
                                         </div>
@@ -347,7 +332,7 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
              </div>
              
              <div className="flex items-center gap-3 pl-6 border-l border-gray-200">
-               <div className="text-right hidden md:block"><p className="text-sm font-bold text-gray-800 leading-tight">{currentUser.username}</p><p className="text-[10px] text-gray-500 uppercase font-bold">{currentUser.linkedDestUnit || 'Geral'}</p></div>
+               <div className="text-right hidden md:block"><p className="text-sm font-bold text-gray-800 leading-tight">{currentUser.username}</p><p className="text-[10px] text-gray-500 uppercase font-bold">{currentUser.linkedDestUnit || 'Painel Central'}</p></div>
                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-white">{currentUser.username.charAt(0).toUpperCase()}</div>
              </div>
            </div>
@@ -364,21 +349,20 @@ const ChangePasswordModal = ({ onClose, username }: { onClose: () => void, usern
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const handleSave = async () => {
-    if (newPass !== confirmPass) return addToast('As senhas não coincidem.', 'error');
-    if (newPass.length < 4) return addToast('Senha muito curta.', 'warning');
+    if (newPass !== confirmPass) return addToast('Senhas não conferem.', 'error');
     setIsLoading(true);
     const success = await postDataToScript('changePassword', { username, newPass, sheet: 'USERS' });
-    if (success) { addToast('Senha atualizada com sucesso!', 'success'); onClose(); }
-    else addToast('Erro ao atualizar senha.', 'error');
+    if (success) { addToast('Senha alterada!', 'success'); onClose(); }
+    else addToast('Erro!', 'error');
     setIsLoading(false);
   };
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-scale-in">
         <h3 className="text-xl font-bold text-primary mb-4">Mudar Senha</h3>
-        <input type="password" placeholder="Nova Senha" className="w-full mb-3 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none transition" value={newPass} onChange={e => setNewPass(e.target.value)} />
-        <input type="password" placeholder="Confirme a Nova Senha" className="w-full mb-6 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none transition" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
-        <div className="flex gap-3"><button onClick={onClose} className="flex-1 py-2 text-gray-600 font-medium">Cancelar</button><button onClick={handleSave} disabled={isLoading} className="flex-1 py-2 bg-primary text-white rounded-lg font-bold hover:bg-accent transition">{isLoading ? 'Salvando...' : 'Salvar'}</button></div>
+        <input type="password" placeholder="Nova Senha" className="w-full mb-3 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none" value={newPass} onChange={e => setNewPass(e.target.value)} />
+        <input type="password" placeholder="Confirmar Senha" className="w-full mb-6 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+        <div className="flex gap-3"><button onClick={onClose} className="flex-1 py-2 text-gray-600 font-medium hover:bg-gray-50 rounded-lg">Cancelar</button><button onClick={handleSave} className="flex-1 py-2 bg-primary text-white rounded-lg font-bold hover:bg-accent transition">Salvar</button></div>
       </div>
     </div>
   );

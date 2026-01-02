@@ -53,18 +53,18 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
         setTimeout(() => {
             if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }, 100);
-        addToast('Nota enviada!', 'success');
+        addToast('Tratativa salva com sucesso', 'success');
     } else {
-        addToast('Erro ao enviar nota', 'error');
+        addToast('Erro ao salvar tratativa', 'error');
     }
     setIsSubmitting(false);
   };
 
   const handleMarkSearch = async () => {
-      if(!confirm('Deseja marcar esta mercadoria como EM BUSCA?')) return;
+      if(!confirm('Deseja marcar como EM BUSCA?')) return;
       setIsSubmitting(true);
       const success = await markAsInSearch(cte.id);
-      if(success) addToast('Mercadoria em BUSCA!', 'success');
+      if(success) addToast('Mercadoria em busca!', 'success');
       setIsSubmitting(false);
   };
 
@@ -85,38 +85,52 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in cursor-pointer" onClick={onClose}>
         <div className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative animate-scale-in cursor-auto" onClick={(e) => e.stopPropagation()}>
             <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-200" title="Fechar"><i className="ph-bold ph-x text-xl"></i></button>
-            
-            {/* Lateral Info */}
             <div className="w-full md:w-1/3 bg-gray-50 p-6 overflow-y-auto border-r border-gray-100 hidden md:block pt-12 md:pt-6">
                 <div className="mb-6"><h2 className="text-2xl font-bold text-gray-800 tracking-tighter">{cte.cte}</h2><p className="text-sm text-gray-500 font-medium">Série {cte.serie}</p>
-                    <div className="mt-3 flex flex-wrap gap-2"><span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${getStatusColor(cte.computedStatus || 'NO_PRAZO')}`}>{cte.computedStatus?.replace(/_/g, ' ')}</span><span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${getPaymentColor(cte.fretePago)}`}>{cte.fretePago}</span></div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${getStatusColor(cte.computedStatus || 'NO_PRAZO')}`}>{cte.computedStatus?.replace(/_/g, ' ')}</span>
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${getPaymentColor(cte.fretePago)}`}>{cte.fretePago}</span>
+                    </div>
                 </div>
                 <div className="space-y-4 text-sm text-gray-600">
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Rota</p><div className="flex flex-col gap-2"><div><p className="font-bold text-gray-800">{cte.coleta}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Origem</p></div><div className="w-px h-4 bg-gray-200 ml-1"></div><div><p className="font-bold text-gray-800">{cte.entrega}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Destino</p></div></div></div>
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Prazos</p><div className="flex justify-between"><span>Emissão:</span><span className="font-medium">{cte.dataEmissao}</span></div><div className="flex justify-between mt-1"><span>Limite:</span><span className="font-bold text-red-600">{cte.dataLimite}</span></div></div>
-                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Cliente</p><p className="font-medium text-gray-800 break-words leading-tight">{cte.destinatario}</p></div>
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Rota</p>
+                        <div className="flex flex-col gap-2">
+                            <div><p className="font-bold text-gray-800">{cte.coleta}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Origem</p></div>
+                            <div className="w-px h-4 bg-gray-300 ml-1"></div>
+                            <div><p className="font-bold text-gray-800">{cte.entrega}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Destino</p></div>
+                        </div>
+                    </div>
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Prazos</p>
+                        <div className="flex justify-between"><span>Emissão:</span><span className="font-medium">{cte.dataEmissao}</span></div>
+                        <div className="flex justify-between mt-1"><span>Limite:</span><span className="font-bold text-red-600">{cte.dataLimite}</span></div>
+                    </div>
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Cliente</p>
+                        <p className="font-medium text-gray-800 break-words leading-snug">{cte.destinatario}</p>
+                    </div>
                 </div>
                 <div className="mt-8 space-y-3">
-                    {cte.status === 'EM BUSCA' ? (<button onClick={handleResolve} disabled={isSubmitting} className="w-full py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2"><i className="ph-bold ph-check-circle text-lg"></i> LOCALIZADA</button>) : isResolved ? (<div className="w-full py-4 bg-green-50 text-green-700 border border-green-200 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"><i className="ph-fill ph-check-circle text-lg"></i> LOCALIZADA</div>) : (<button onClick={handleMarkSearch} disabled={isSubmitting} className="w-full py-4 bg-purple-100 text-purple-700 border border-purple-200 rounded-2xl font-black uppercase text-xs hover:bg-purple-200 transition flex items-center justify-center gap-2"><i className="ph-bold ph-binoculars text-lg"></i> MARCAR BUSCA</button>)}
+                    {cte.status === 'EM BUSCA' ? (<button onClick={handleResolve} disabled={isSubmitting} className="w-full py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2"><i className="ph-bold ph-check-circle text-lg"></i> LOCALIZADA</button>) : isResolved ? (<div className="w-full py-4 bg-green-50 text-green-700 border border-green-200 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 shadow-inner"><i className="ph-fill ph-check-circle text-lg"></i> LOCALIZADA</div>) : (<button onClick={handleMarkSearch} disabled={isSubmitting} className="w-full py-4 bg-purple-100 text-purple-700 border border-purple-200 rounded-2xl font-black uppercase text-xs hover:bg-purple-200 transition flex items-center justify-center gap-2"><i className="ph-bold ph-binoculars text-lg"></i> MARCAR BUSCA</button>)}
                 </div>
             </div>
             
-            {/* Main Chat Area */}
             <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6 flex items-center gap-2">
-                   <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-dots text-xl"></i></div>
+                   <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-text text-xl"></i></div>
                    <h3 className="font-bold text-gray-800">Histórico de Tratativas</h3>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-8 bg-[#F8F9FC] custom-scrollbar" ref={scrollRef}>
-                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Nenhuma tratativa iniciada.</p></div>) : (
+                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Nenhuma tratativa registrada.</p></div>) : (
                         cteNotes.map(note => {
                             const isMe = currentUser?.username === note.user;
-                            const isSearchNote = note.statusBusca || note.text.includes('BUSCA') || note.text.includes('LOCALIZADA');
+                            const isSearchNote = note.statusBusca || note.text.toUpperCase().includes('BUSCA') || note.text.toUpperCase().includes('LOCALIZADA');
                             
                             return (
                               <div key={note.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 shadow-sm relative border-2 ${isSearchNote ? 'border-purple-200 bg-purple-50/50' : (isMe ? 'bg-white border-indigo-50' : 'bg-white border-gray-100')}`}>
+                                <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 shadow-sm relative border-2 ${isSearchNote ? 'border-purple-200 bg-purple-50/50' : (isMe ? 'bg-white border-indigo-100' : 'bg-white border-gray-100')}`}>
                                   <div className="flex justify-between items-center gap-4 mb-2">
                                     <span className={`text-[10px] font-black uppercase tracking-widest ${isSearchNote ? 'text-purple-700' : (isMe ? 'text-indigo-600' : 'text-primary')}`}>
                                         {isSearchNote && <i className="ph-fill ph-warning-circle mr-1"></i>}
@@ -126,37 +140,35 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                                   </div>
                                   <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isSearchNote ? 'text-purple-900 font-semibold' : 'text-gray-800'}`}>{note.text}</p>
                                   
-                                  {/* Grid de Imagens */}
                                   {note.imageUrl && (
                                     <div className="mt-4 flex gap-3 flex-wrap">
                                       {note.imageUrl.split(',')
                                         .map(url => url.trim())
                                         .filter(url => url.length > 0)
                                         .map((url, i) => {
-                                          // USAR THUMBNAIL PARA PREVIEW (Mais rápido e bypassa restrições)
                                           const thumbUrl = formatImageUrl(url, true);
-                                          const fullViewUrl = formatImageUrl(url, false);
+                                          const fullUrl = formatImageUrl(url, false);
                                           
                                           return (
                                             <div key={i} className="flex flex-col gap-1 group">
-                                              <a href={fullViewUrl} target="_blank" rel="noopener noreferrer" className="block relative overflow-hidden rounded-xl border-2 border-white shadow-md bg-gray-100 w-32 h-32 flex items-center justify-center">
+                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="block relative overflow-hidden rounded-xl border-2 border-white shadow-md bg-gray-100 w-32 h-32 flex items-center justify-center">
                                                 <img 
                                                   src={thumbUrl} 
                                                   alt="evidência" 
-                                                  loading="lazy"
                                                   className="w-full h-full object-cover group-hover:scale-110 transition duration-500" 
                                                   onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    // Fallback 1: Tentar o link direto sem thumbnail
-                                                    if (!target.src.includes('uc?')) {
-                                                        target.src = fullViewUrl;
+                                                    const img = e.target as HTMLImageElement;
+                                                    // Fallback 1: Tenta link direto se thumb falhar
+                                                    if (!img.src.includes('uc?')) {
+                                                        img.src = fullUrl;
                                                     } else {
-                                                        // Fallback final: Placeholder amigável
-                                                        target.parentElement!.classList.add('bg-indigo-50');
-                                                        target.style.display = 'none';
-                                                        const icon = document.createElement('i');
-                                                        icon.className = 'ph ph-image-square text-3xl text-indigo-300';
-                                                        target.parentElement!.appendChild(icon);
+                                                        // Fallback Final: Ícone de Erro Amigável
+                                                        img.parentElement!.classList.add('bg-gray-200');
+                                                        img.style.display = 'none';
+                                                        const span = document.createElement('span');
+                                                        span.className = 'text-[10px] font-black text-gray-400 uppercase text-center p-2';
+                                                        span.innerText = 'Ver Original';
+                                                        img.parentElement!.appendChild(span);
                                                     }
                                                   }}
                                                 />
@@ -164,7 +176,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                                                    <i className="ph-bold ph-magnifying-glass-plus text-white text-2xl"></i>
                                                 </div>
                                               </a>
-                                              <a href={fullViewUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-center font-black text-gray-400 hover:text-primary transition uppercase tracking-tighter py-1">Abrir Original</a>
+                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-center font-black text-gray-400 hover:text-primary transition uppercase tracking-tighter py-1">Abrir Link</a>
                                             </div>
                                           );
                                         })
@@ -178,7 +190,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     )}
                 </div>
                 
-                {/* Input Area */}
                 <div className="p-4 bg-white border-t border-gray-100">
                     <div className="flex gap-2 items-center">
                         <label className="flex items-center gap-2 px-3 py-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200 transition-colors shadow-sm">
@@ -190,7 +201,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                                 type="text" 
                                 value={newNote} 
                                 onChange={e => setNewNote(e.target.value)} 
-                                placeholder="Digite sua resposta ou tratativa..." 
+                                placeholder="Digite uma nota..." 
                                 className="w-full pl-4 pr-12 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all outline-none font-medium text-sm" 
                                 onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}
                             />
@@ -203,15 +214,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                             </button>
                         </div>
                     </div>
-                    {selectedFiles.length > 0 && (
-                        <div className="mt-3 flex gap-2 overflow-x-auto py-1">
-                            {selectedFiles.map((f, idx) => (
-                                <div key={idx} className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-[10px] font-black border border-indigo-100 flex items-center gap-1">
-                                    <i className="ph ph-image"></i> {f.name.substring(0, 10)}...
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    {selectedFiles.length > 0 && <div className="mt-2 text-[10px] font-bold text-indigo-600 ml-2 animate-pulse">{selectedFiles.length} arquivo(s) prontos para envio</div>}
                 </div>
             </div>
         </div>
@@ -223,7 +226,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const { ctes, notes, currentUser, config, setSelectedCteId } = useApp();
   const [filterText, setFilterText] = useState('');
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
-  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'dataLimite', direction: 'asc' });
 
   const role = currentUser?.role.toLowerCase();
@@ -305,35 +307,60 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 bg-white/50 backdrop-blur-sm">
-            {filteredData.map(item => (
-                <tr key={item.id} className="hover:bg-white transition group">
-                    <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
-                    <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[250px]">{item.destinatario}</td>
-                    <td className="p-5 text-sm font-bold text-gray-900">{item.dataLimite}</td>
-                    <td className="p-5">
-                        <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>
-                            {item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}
-                        </span>
-                    </td>
-                    <td className="p-5 text-right"><button onClick={() => setSelectedCteId(item.id)} className="w-12 h-12 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center mx-auto hover:rotate-6"><i className="ph-bold ph-chat-circle-dots text-xl"></i></button></td>
-                </tr>
-            ))}
+            {filteredData.map(item => {
+                const noteCount = notes.filter(n => n.cteId === item.id).length;
+                return (
+                    <tr key={item.id} className="hover:bg-white transition group">
+                        <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
+                        <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[250px]">{item.destinatario}</td>
+                        <td className="p-5 text-sm font-bold text-gray-900">{item.dataLimite}</td>
+                        <td className="p-5">
+                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>
+                                {item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}
+                            </span>
+                        </td>
+                        <td className="p-5 text-right">
+                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-12 h-12 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center mx-auto hover:rotate-6">
+                                <i className="ph-bold ph-chat-circle-dots text-xl"></i>
+                                {noteCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-sm">
+                                        {noteCount}
+                                    </span>
+                                )}
+                            </button>
+                        </td>
+                    </tr>
+                );
+            })}
           </tbody>
         </table>
       </div>
       
       {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
-        {filteredData.map(item => (
-            <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100" onClick={() => setSelectedCteId(item.id)}>
-                <div className="flex justify-between items-start mb-3">
-                    <div><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">CTE / SÉRIE</p><h4 className="font-black text-primary text-lg">{item.cte} / {item.serie}</h4></div>
-                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+        {filteredData.map(item => {
+            const noteCount = notes.filter(n => n.cteId === item.id).length;
+            return (
+                <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100" onClick={() => setSelectedCteId(item.id)}>
+                    <div className="flex justify-between items-start mb-3">
+                        <div><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">CTE / SÉRIE</p><h4 className="font-black text-primary text-lg">{item.cte} / {item.serie}</h4></div>
+                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div className="mb-4"><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">DESTINATÁRIO</p><p className="text-sm font-medium text-gray-700 truncate">{item.destinatario}</p></div>
+                    <div className="flex justify-between items-center">
+                        <div className="flex flex-col"><span className="text-[10px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div>
+                        <div className="relative w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <i className="ph-bold ph-arrow-right"></i>
+                            {noteCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">
+                                    {noteCount}
+                                </span>
+                            )}
+                        </div>
+                    </div>
                 </div>
-                <div className="mb-4"><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">DESTINATÁRIO</p><p className="text-sm font-medium text-gray-700 truncate">{item.destinatario}</p></div>
-                <div className="flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div><div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><i className="ph-bold ph-arrow-right"></i></div></div>
-            </div>
-        ))}
+            );
+        })}
       </div>
     </div>
   );
