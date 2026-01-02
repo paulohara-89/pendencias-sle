@@ -117,7 +117,7 @@ export const Login = () => {
             </form>
 
             <div className="mt-8 text-center">
-               <p className="text-xs text-gray-400">© 2025 São Luiz Express. Todos os direitos reservados.</p>
+               <p className="text-xs text-gray-400">© 2026 São Luiz Express. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
