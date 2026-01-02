@@ -98,56 +98,51 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     {cte.status === 'EM BUSCA' ? (<button onClick={handleResolve} disabled={isSubmitting} className="w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex items-center justify-center gap-2"><i className="ph-bold ph-check-circle"></i> Mercadoria Localizada</button>) : isResolved ? (<div className="w-full py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl font-bold flex items-center justify-center gap-2"><i className="ph-fill ph-check-circle"></i> LOCALIZADA</div>) : (<button onClick={handleMarkSearch} disabled={isSubmitting} className="w-full py-3 bg-purple-100 text-purple-700 border border-purple-200 rounded-xl font-bold hover:bg-purple-200 transition flex items-center justify-center gap-2"><i className="ph-bold ph-binoculars"></i> MARCAR EM BUSCA</button>)}
                 </div>
             </div>
-            <div className="md:hidden p-4 border-b border-gray-100 bg-gray-50 pt-12">
-                 <h2 className="text-xl font-bold text-gray-800">{cte.cte}</h2><p className="text-sm text-gray-500">Série {cte.serie}</p>
-                 <div className="mt-3 flex gap-2">
-                    {cte.status === 'EM BUSCA' ? (
-                      <button onClick={handleResolve} className="flex-1 text-xs bg-green-600 text-white px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-check"></i> Resolver</button>
-                    ) : isResolved ? (
-                      <span className="flex-1 text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1">Localizada</span>
-                    ) : (
-                      <button onClick={handleMarkSearch} className="flex-1 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-binoculars"></i> Marcar</button>
-                    )}
-                 </div>
-            </div>
-            <div className="flex-1 flex flex-col bg-white">
-                <div className="p-4 border-b border-gray-100 bg-white z-10 hidden md:block pt-6"><h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph-fill ph-chat-circle-text text-primary"></i> Histórico de Tratativas</h3></div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#F8F9FC]" ref={scrollRef}>
+            
+            <div className="flex-1 flex flex-col bg-white overflow-hidden">
+                <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6"><h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph-fill ph-chat-circle-text text-primary"></i> Histórico de Tratativas</h3></div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[#F8F9FC]" ref={scrollRef}>
                     {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p>Nenhuma nota registrada.</p></div>) : (
                         cteNotes.map(note => {
                             const isMe = currentUser?.username === note.user;
+                            const isSearchNote = note.statusBusca || note.text.includes('EM BUSCA');
                             return (
                               <div key={note.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-4 shadow-sm ${isMe ? 'bg-indigo-50 text-gray-800 rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}>
-                                  <div className="flex justify-between items-center gap-4 mb-1">
-                                    <span className={`text-xs font-bold ${isMe ? 'text-indigo-600' : 'text-primary'}`}>{note.user}</span>
-                                    <span className="text-[10px] text-gray-400">{note.date}</span>
+                                <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-4 shadow-sm border-2 ${isSearchNote ? 'border-purple-200 bg-purple-50/30' : (isMe ? 'bg-white border-indigo-100' : 'bg-white border-gray-100')}`}>
+                                  <div className="flex justify-between items-center gap-4 mb-2">
+                                    <span className={`text-xs font-black uppercase tracking-widest ${isSearchNote ? 'text-purple-700' : (isMe ? 'text-indigo-600' : 'text-primary')}`}>{note.user}</span>
+                                    <span className="text-[10px] text-gray-400 font-bold">{note.date}</span>
                                   </div>
-                                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{note.text}</p>
+                                  <p className="text-sm whitespace-pre-wrap leading-relaxed text-gray-800">{note.text}</p>
                                   {note.imageUrl && (
-                                    <div className="mt-3 flex gap-2 flex-wrap">
+                                    <div className="mt-4 flex gap-3 flex-wrap">
                                       {note.imageUrl.split(',')
                                         .map(url => url.trim())
                                         .filter(url => url.length > 0)
                                         .map((url, i) => {
-                                          const directUrl = formatImageUrl(url);
+                                          const previewUrl = formatImageUrl(url, true); // Usa thumbnail para preview
+                                          const fullUrl = formatImageUrl(url, false);
                                           return (
-                                            <div key={i} className="flex flex-col gap-1 items-center">
-                                              <a href={directUrl} target="_blank" rel="noopener noreferrer" className="block group">
+                                            <div key={i} className="flex flex-col gap-1">
+                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="block relative group overflow-hidden rounded-xl border-2 border-white shadow-md">
                                                 <img 
-                                                  src={directUrl} 
+                                                  src={previewUrl} 
                                                   alt="anexo" 
-                                                  loading="lazy"
-                                                  className="w-24 h-24 rounded-lg border border-gray-200 object-cover hover:ring-2 hover:ring-primary transition bg-gray-100" 
+                                                  className="w-32 h-32 object-cover group-hover:scale-110 transition duration-500 bg-gray-200" 
                                                   onError={(e) => {
-                                                    // Se falhar, mostra o placeholder de erro
-                                                    (e.target as HTMLImageElement).src = "https://placehold.co/100x100?text=Abrir+Link";
+                                                    const img = e.target as HTMLImageElement;
+                                                    if (!img.src.includes('uc?')) {
+                                                        img.src = fullUrl; // Tenta o link direto se a thumbnail falhar
+                                                    } else {
+                                                        img.src = "https://placehold.co/120x120?text=Abrir+Link";
+                                                    }
                                                   }}
                                                 />
+                                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                                   <i className="ph-bold ph-magnifying-glass-plus text-white text-xl"></i>
+                                                </div>
                                               </a>
-                                              <a href={directUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-primary font-bold">
-                                                ABRIR ORIGINAL
-                                              </a>
+                                              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-center font-black text-gray-400 hover:text-primary transition uppercase tracking-tighter">Ver Original</a>
                                             </div>
                                           );
                                         })
@@ -162,9 +157,10 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                 </div>
                 <div className="p-4 bg-white border-t border-gray-100">
                     <div className="flex gap-2 items-center">
-                        <label className="flex items-center gap-2 px-3 py-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200"><input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} /><i className="ph-bold ph-camera text-xl"></i></label>
-                        <div className="flex-1 relative"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Digite uma nota..." className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white" onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}/><button onClick={handleSendNote} disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-primary text-white rounded-lg"><i className="ph-bold ph-paper-plane-right"></i></button></div>
+                        <label className="flex items-center gap-2 px-3 py-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200 transition"><input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} /><i className="ph-bold ph-camera text-xl"></i></label>
+                        <div className="flex-1 relative"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Digite uma nota..." className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none" onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}/><button onClick={handleSendNote} disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition"><i className="ph-bold ph-paper-plane-right"></i></button></div>
                     </div>
+                    {selectedFiles.length > 0 && <div className="mt-2 text-[10px] font-bold text-indigo-600 ml-2 animate-pulse">{selectedFiles.length} arquivo(s) selecionado(s)</div>}
                 </div>
             </div>
         </div>
@@ -200,16 +196,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
     }
   }, [currentUser, isGlobalUser]);
 
-  const toggleStatusFilter = (item: string) => {
-    if (statusFilters.includes(item)) setStatusFilters(statusFilters.filter(i => i !== item));
-    else setStatusFilters([...statusFilters, item]);
-  };
-
-  const togglePaymentFilter = (item: string) => {
-    if (paymentFilters.includes(item)) setPaymentFilters(paymentFilters.filter(i => i !== item));
-    else setPaymentFilters([...paymentFilters, item]);
-  };
-
   const handleSort = (key: SortKey) => {
     setSortConfig(current => ({
       key,
@@ -219,92 +205,31 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
 
   const filteredData = useMemo(() => {
     let data = ctes;
-
     if (filterText.length > 0) {
         const term = filterText.toLowerCase();
-        data = data.filter(c => 
-            c.cte.includes(filterText) || 
-            c.serie.includes(filterText) || 
-            (c.destinatario && c.destinatario.toLowerCase().includes(term))
-        );
+        data = data.filter(c => c.cte.includes(filterText) || c.serie.includes(filterText) || (c.destinatario && c.destinatario.toLowerCase().includes(term)));
     } else {
         if (!isGlobalUser) {
-            data = data.filter(c => 
-                (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) ||
-                (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) ||
-                c.status === 'EM BUSCA' 
-            );
+            data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
         }
+        if (mode === 'critical') data = data.filter(c => c.computedStatus === 'CRITICO');
+        else if (mode === 'search') data = data.filter(c => c.status === 'EM BUSCA');
+        else data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
 
-        if (mode === 'critical') {
-            data = data.filter(c => c.computedStatus === 'CRITICO');
-        } else if (mode === 'search') {
-            data = data.filter(c => 
-                (c.status === 'EM BUSCA' || c.justificativa?.toUpperCase().includes('BUSCA')) && 
-                c.status !== 'MERCADORIA LOCALIZADA' && 
-                c.status !== 'RESOLVIDO'
-            ); 
-        } else {
-            data = data.filter(c => c.computedStatus !== 'CRITICO');
-        }
-
-        if (selectedDestUnit !== 'all') {
-            data = data.filter(c => {
-                if (mode === 'search' && !isGlobalUser) return true;
-                return c.entrega === selectedDestUnit;
-            });
-        }
-
-        if (statusFilters.length > 0) {
-            data = data.filter(c => statusFilters.includes(c.computedStatus || ''));
-        }
-
-        if (paymentFilters.length > 0) {
-            data = data.filter(c => c.fretePago && paymentFilters.some(pf => c.fretePago.includes(pf)));
-        }
-
-        if (noteFilter !== 'all') {
-            data = data.filter(c => {
-                const hasNote = notes.some(n => n.cteId === c.id);
-                return noteFilter === 'com_nota' ? hasNote : !hasNote;
-            });
-        }
+        if (selectedDestUnit !== 'all') data = data.filter(c => c.entrega === selectedDestUnit);
     }
 
     data = [...data].sort((a, b) => {
       let valA: any, valB: any;
       switch (sortConfig.key) {
         case 'cte': valA = parseInt(a.cte) || 0; valB = parseInt(b.cte) || 0; break;
-        case 'dataEmissao': valA = parseDate(a.dataEmissao)?.getTime() || 0; valB = parseDate(b.dataEmissao)?.getTime() || 0; break;
         case 'dataLimite': valA = parseDate(a.dataLimite)?.getTime() || 0; valB = parseDate(b.dataLimite)?.getTime() || 0; break;
-        case 'status': valA = a.computedStatus || ''; valB = b.computedStatus || ''; break;
-        case 'origem': valA = a.coleta || ''; valB = b.coleta || ''; break;
-        case 'pagamento': valA = a.fretePago || ''; valB = b.fretePago || ''; break;
-        case 'destinatario': valA = a.destinatario || ''; valB = b.destinatario || ''; break;
         default: return 0;
       }
-      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
+      return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
     });
-
     return data;
-  }, [ctes, mode, filterText, currentUser, paymentFilters, selectedDestUnit, statusFilters, isGlobalUser, sortConfig, noteFilter, notes]);
-
-  const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Dados");
-    XLSX.writeFile(wb, `Relatorio_${mode}.xlsx`);
-  };
-
-  const renderDeadline = (limitDateStr: string) => {
-      const daysDiff = calculateBusinessDaysDiff(limitDateStr, config.holidays, config.dataHoje);
-      if (daysDiff === null) return null;
-      if (daysDiff < 0) return <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">Atrasado {Math.abs(daysDiff)} dias</span>;
-      if (daysDiff === 0) return <span className="text-[10px] font-bold text-orange-500 whitespace-nowrap">Vence Hoje</span>;
-      return <span className="text-[10px] font-medium text-green-600 whitespace-nowrap">{daysDiff} dias restantes</span>;
-  };
+  }, [ctes, mode, filterText, currentUser, selectedDestUnit, isGlobalUser, sortConfig]);
 
   const SortIcon = ({ colKey }: { colKey: SortKey }) => {
     if (sortConfig.key !== colKey) return <i className="ph-bold ph-caret-up-down text-gray-300 ml-1 text-xs"></i>;
@@ -317,32 +242,30 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         <div className="flex flex-col xl:flex-row justify-between items-center gap-4">
             <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
                 <div className="relative w-full md:w-80"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Busca Universal..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white" /></div>
-                {!filterText && (<div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 shadow-sm w-full md:w-auto">{isGlobalUser ? (<select className="bg-transparent text-sm font-bold text-gray-700 w-full md:w-48" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}><option value="all">Todas as Direções</option>{destinationUnits.map(unit => (<option key={unit} value={unit}>{unit}</option>))}</select>) : (<span className="font-bold text-gray-800 text-sm">{currentUser?.linkedDestUnit || 'Todas'}</span>)}</div>)}
+                {!filterText && (<div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 shadow-sm w-full md:w-auto">{isGlobalUser ? (<select className="bg-transparent text-sm font-bold text-gray-700 w-full md:w-48 outline-none" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}><option value="all">Todas as Direções</option>{destinationUnits.map(unit => (<option key={unit} value={unit}>{unit}</option>))}</select>) : (<span className="font-bold text-gray-800 text-sm px-2">{currentUser?.linkedDestUnit || 'Todas'}</span>)}</div>)}
             </div>
-            <button onClick={exportToExcel} className="flex items-center gap-2 px-5 py-2.5 bg-green-100 text-green-700 font-medium rounded-xl">Exportar</button>
+            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filteredData); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Dados"); XLSX.writeFile(wb, `Relatorio.xlsx`); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-100 text-green-700 font-bold rounded-xl hover:bg-green-200 transition">Exportar</button>
         </div>
       </div>
       <div className="hidden md:block glass-panel rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
         <table className="w-full text-left min-w-[1000px]">
-          <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+          <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black tracking-widest">
             <tr>
               <th className="p-5 cursor-pointer" onClick={() => handleSort('cte')}>CTE / Série <SortIcon colKey="cte" /></th>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('destinatario')}>Destinatário <SortIcon colKey="destinatario" /></th>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('dataLimite')}>Prazo / Limite <SortIcon colKey="dataLimite" /></th>
+              <th className="p-5">Destinatário</th>
+              <th className="p-5 cursor-pointer" onClick={() => handleSort('dataLimite')}>Prazo <SortIcon colKey="dataLimite" /></th>
               <th className="p-5">Status</th>
-              <th className="p-5">Origem / Destino</th>
-              <th className="p-5 text-right">Ações</th>
+              <th className="p-5 text-right">Ver</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 bg-white">
             {filteredData.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50/80 transition group">
+                <tr key={item.id} className="hover:bg-indigo-50/30 transition group">
                     <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
                     <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[200px]">{item.destinatario}</td>
-                    <td className="p-5 text-sm"><div className="flex flex-col"><span className="font-bold">{item.dataLimite}</span>{renderDeadline(item.dataLimite)}</div></td>
-                    <td className="p-5"><span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.computedStatus?.replace(/_/g, ' ')}</span></td>
-                    <td className="p-5 text-xs text-gray-500">{item.coleta} &rarr; {item.entrega}</td>
-                    <td className="p-5 text-right"><button onClick={() => setSelectedCteId(item.id)} className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"><i className="ph-bold ph-chat"></i></button></td>
+                    <td className="p-5 text-sm"><div className="flex flex-col"><span className="font-bold text-gray-900">{item.dataLimite}</span></div></td>
+                    <td className="p-5"><span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-tighter ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span></td>
+                    <td className="p-5 text-right"><button onClick={() => setSelectedCteId(item.id)} className="w-10 h-10 rounded-xl bg-gray-100 text-gray-600 hover:bg-primary hover:text-white transition shadow-sm"><i className="ph-bold ph-eye"></i></button></td>
                 </tr>
             ))}
           </tbody>

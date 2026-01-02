@@ -18,10 +18,21 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// ErrorBoundary: Fixed TypeScript "Property does not exist" errors by explicitly using Component and ensuring correct inheritance through constructor initialization.
+/**
+ * ErrorBoundary: A robust class component to catch JS errors in children.
+ * Fixed TypeScript errors (Property 'state'/'props' does not exist) by ensuring explicit typing
+ * of the Component class and using standard React Class patterns.
+ */
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Explicitly declare the state property to satisfy TypeScript property existence checks
+  public override state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    // Explicitly initialize state here as well to ensure constructor initialization logic
     this.state = {
       hasError: false,
       error: null
@@ -37,7 +48,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Correctly accessing state and props from 'this' which are inherited from Component.
+    // Correctly accessing state and props from 'this' which are now explicitly recognized
     const { hasError, error } = this.state;
     const { children } = this.props;
 
