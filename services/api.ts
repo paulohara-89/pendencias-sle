@@ -7,7 +7,7 @@ const SHEET_ID = '1hnZkQ2uWgKLu4gUmmfVaxfoHw8NKZmVOnv7lEJ8xWN0';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzPWSLErtpiqSP7StNxeXZVyObA2uzryNVZiVMgYI884Sr7S5JH3tT16CeNNLjps4YI/exec';
 
 const getSheetUrl = (sheetName: string) => 
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 
 const generateId = (serie: any, cte: any) => {
     const s = serie ? String(serie).trim() : '';
@@ -94,12 +94,10 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
     });
     const notes = Array.from(uniqueNotesMap.values());
 
-    // --- Extração de Configuração e Feriados ---
     const todayStr = (configRaw[0] && configRaw[0][1]) || new Date().toLocaleDateString('pt-BR');
     const tomorrowStr = (configRaw[1] && configRaw[1][1]) || '';
     const limitDays = (configRaw[2] && parseInt(configRaw[2][1])) || 10;
 
-    // Feriados estão na Coluna D (índice 3)
     const holidays: string[] = configRaw
         .map(row => row[3])
         .filter(val => val && String(val).match(/\d{2}\/\d{2}\/\d{4}/));
@@ -114,21 +112,33 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
     return { ctes, users, notes, profiles, config };
 
   } catch (error) {
-    console.error("Error fetching data:", error);
-    throw error;
+    console.error("Erro ao carregar dados:", error);
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao carregar planilha.";
+    throw new Error(errorMessage);
   }
 };
 
-const fetchCsv = (url: string, hasHeader: boolean = true): Promise<any[]> => {
-  return new Promise((resolve, reject) => {
-    Papa.parse(url, {
-      download: true,
-      header: hasHeader,
-      skipEmptyLines: true,
-      complete: (results) => resolve(results.data as any[]),
-      error: (err) => reject(err)
+const fetchCsv = async (url: string, hasHeader: boolean = true): Promise<any[]> => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+        if (response.status === 404) throw new Error("Aba da planilha não encontrada.");
+        if (response.status === 403) throw new Error("Sem permissão para acessar a planilha. Certifique-se de que ela está 'disponível para qualquer pessoa com o link'.");
+        throw new Error(`Erro HTTP: ${response.status}`);
+    }
+    const csvText = await response.text();
+    return new Promise((resolve, reject) => {
+        Papa.parse(csvText, {
+            header: hasHeader,
+            skipEmptyLines: true,
+            complete: (results) => resolve(results.data as any[]),
+            error: (err: any) => reject(new Error("Falha ao processar o formato CSV da planilha."))
+        });
     });
-  });
+  } catch (e) {
+      console.error(`Falha no fetchCsv para ${url}:`, e);
+      throw e;
+  }
 };
 
 export const postDataToScript = async (action: string, payload: any) => {
@@ -149,7 +159,7 @@ export const postDataToScript = async (action: string, payload: any) => {
 
 export const testConnection = async () => {
   try {
-     const response = await fetch(getSheetUrl('BASE'), { method: 'HEAD' });
+     const response = await fetch(getSheetUrl('BASE'), { method: 'GET' });
      return response.ok;
   } catch (e) {
     return false;

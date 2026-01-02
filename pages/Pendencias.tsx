@@ -14,6 +14,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
   const { addToast } = useToast();
   const [newNote, setNewNote] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -25,26 +26,59 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [cteNotes]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setSelectedFiles(Array.from(e.target.files));
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(prev => [...prev, ...filesArray]);
+      
+      const newPreviews: string[] = [];
+      for (const file of filesArray) {
+        const reader = new FileReader();
+        const p = new Promise<string>((resolve) => {
+          reader.onload = (ev) => resolve(ev.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+        newPreviews.push(await p);
+      }
+      setPreviews(prev => [...prev, ...newPreviews]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSendNote = async () => {
     if (!newNote.trim() && selectedFiles.length === 0) return;
     setIsSubmitting(true);
-    const imagesBase64: string[] = [];
-    for (const file of selectedFiles) {
-        try { const base64 = await compressImage(file); imagesBase64.push(base64); } 
-        catch (e) { console.error("Compression failed", e); }
+    
+    try {
+      const imagesBase64: string[] = [];
+      for (const file of selectedFiles) {
+          try { 
+            const base64 = await compressImage(file, 1024, 0.7); 
+            imagesBase64.push(base64); 
+          } catch (e) { 
+            console.error("Compression failed", e); 
+          }
+      }
+      
+      const success = await addNote(cte.id, newNote, imagesBase64);
+      if (success) {
+          setNewNote('');
+          setSelectedFiles([]);
+          setPreviews([]);
+          setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+          addToast('Tratativa salva!', 'success');
+      } else {
+          addToast('Erro ao salvar no servidor!', 'error');
+      }
+    } catch (err) {
+      addToast('Erro ao processar imagens.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-    const success = await addNote(cte.id, newNote, imagesBase64);
-    if (success) {
-        setNewNote('');
-        setSelectedFiles([]);
-        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
-        addToast('Tratativa salva!', 'success');
-    } else addToast('Erro ao salvar!', 'error');
-    setIsSubmitting(false);
   };
 
   const handleMarkSearch = async () => {
@@ -66,8 +100,9 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in cursor-pointer" onClick={onClose}>
         <div className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative animate-scale-in cursor-auto" onClick={(e) => e.stopPropagation()}>
-            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-200"><i className="ph-bold ph-x text-xl"></i></button>
+            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-white/80 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-100"><i className="ph-bold ph-x text-xl"></i></button>
             
+            {/* Sidebar de Informações do CTE */}
             <div className="w-full md:w-1/3 bg-gray-50 p-6 overflow-y-auto border-r border-gray-100 hidden md:block pt-12 md:pt-6">
                 <div className="mb-6"><h2 className="text-2xl font-bold text-gray-800 tracking-tighter">{cte.cte}</h2><p className="text-sm text-gray-500 font-medium">Série {cte.serie}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -92,10 +127,12 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                 </div>
             </div>
             
+            {/* Área de Chat / Notas */}
             <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6 flex items-center gap-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-text text-xl"></i></div><h3 className="font-bold text-gray-800 text-sm">Tratativas e Evidências</h3></div>
+                
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[#F8F9FC] custom-scrollbar" ref={scrollRef}>
-                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Sem tratativas.</p></div>) : (
+                    {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p className="text-sm font-medium">Sem tratativas registradas.</p></div>) : (
                         cteNotes.map(note => {
                             const isMe = currentUser?.username === note.user;
                             const isSearchNote = note.statusBusca || note.text.toUpperCase().includes('BUSCA') || note.text.toUpperCase().includes('LOCALIZADA');
@@ -119,10 +156,47 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                         })
                     )}
                 </div>
-                <div className="p-4 bg-white border-t border-gray-100">
-                    <div className="flex gap-2 items-center">
-                        <label className="p-3 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 cursor-pointer border border-gray-200 transition-colors"><input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} /><i className="ph-bold ph-camera text-xl"></i></label>
-                        <div className="flex-1 relative"><input type="text" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Digite uma nota..." className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white outline-none" onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}/><button onClick={handleSendNote} disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} className={`absolute right-1 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition ${(!newNote.trim() && selectedFiles.length === 0) ? 'text-gray-300' : 'bg-primary text-white shadow-sm'}`}><i className="ph-bold ph-paper-plane-right"></i></button></div>
+
+                {/* Input e Previews de Imagem */}
+                <div className="bg-white border-t border-gray-100 shadow-lg">
+                    {/* ÁREA DE PREVIEW DE IMAGENS SELECIONADAS */}
+                    {previews.length > 0 && (
+                      <div className="p-3 bg-gray-50 flex gap-3 overflow-x-auto no-scrollbar border-b border-gray-100 animate-fade-in">
+                        {previews.map((src, i) => (
+                          <div key={i} className="relative w-20 h-20 shrink-0">
+                            <img src={src} className="w-full h-full object-cover rounded-xl border-2 border-primary/20 shadow-sm" />
+                            <button onClick={() => removeFile(i)} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition">
+                              <i className="ph-bold ph-x text-xs"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="p-4 flex gap-2 items-center">
+                        <label className="p-3 rounded-2xl bg-gray-100 text-gray-500 hover:bg-primary/10 hover:text-primary cursor-pointer border border-gray-200 transition-all flex items-center justify-center shrink-0">
+                            <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileSelect} />
+                            <i className="ph-bold ph-camera text-2xl"></i>
+                        </label>
+                        
+                        <div className="flex-1 relative">
+                            <input 
+                              type="text" 
+                              value={newNote} 
+                              onChange={e => setNewNote(e.target.value)} 
+                              placeholder={isSubmitting ? "Enviando..." : "Digite uma tratativa..."} 
+                              disabled={isSubmitting}
+                              className="w-full pl-4 pr-12 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none transition-all" 
+                              onKeyDown={e => e.key === 'Enter' && !isSubmitting && handleSendNote()}
+                            />
+                            <button 
+                              onClick={handleSendNote} 
+                              disabled={isSubmitting || (!newNote.trim() && selectedFiles.length === 0)} 
+                              className={`absolute right-1 top-1/2 transform -translate-y-1/2 w-10 h-10 rounded-xl transition-all flex items-center justify-center ${(!newNote.trim() && selectedFiles.length === 0) ? 'text-gray-300' : 'bg-primary text-white shadow-lg active:scale-90'}`}
+                            >
+                                {isSubmitting ? <i className="ph ph-spinner ph-spin"></i> : <i className="ph-bold ph-paper-plane-right text-lg"></i>}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,7 +235,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const filteredData = useMemo(() => {
     let data = ctes;
     
-    // --- BUSCA GLOBAL ---
     if (filterText) {
         const term = filterText.toLowerCase();
         data = data.filter(c => 
@@ -170,18 +243,15 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             c.destinatario?.toLowerCase().includes(term)
         );
     } else {
-        // --- FILTRO DE FLUXO E VÍNCULO ---
         if (!isGlobalUser) {
             const myDest = currentUser?.linkedDestUnit?.trim().toLowerCase();
             const myOrigin = currentUser?.linkedOriginUnit?.trim().toLowerCase();
             
             if (flowFilter === 'outbound') {
-                // Filtro de Saída: Prioriza o vínculo de Origem (COLETA)
                 if (myOrigin) {
                     data = data.filter(c => c.coleta.toLowerCase().includes(myOrigin));
                 }
             } else {
-                // Filtro de Entrada (Inbound): Prioriza o vínculo de Destino ou Seleção da Barra
                 if (selectedDestUnit !== 'all') {
                     data = data.filter(c => c.entrega === selectedDestUnit);
                 } else if (myDest) {
@@ -189,14 +259,12 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 }
             }
         } else {
-            // Usuário Global: Apenas seleção da barra de destino
             if (selectedDestUnit !== 'all') {
                 data = data.filter(c => c.entrega === selectedDestUnit);
             }
         }
     }
 
-    // --- SEGREGAÇÃO ABSOLUTA DE STATUS ---
     if (mode === 'critical') {
         data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
     } else if (mode === 'search') {
@@ -205,12 +273,9 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
     }
 
-    // 4. Filtros de Pagamento
     if (paymentFilters.length > 0) {
         data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
     }
-
-    // 5. Filtro de Notas
     if (noteFilter !== 'all') {
         data = data.filter(c => {
             const hasNotes = notes.some(n => n.cteId === c.id);
@@ -233,7 +298,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             <div className="flex flex-col md:flex-row items-stretch gap-3 flex-1">
                 <div className="relative flex-1 md:max-w-md">
                     <i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input type="text" placeholder="Busca Global (Qualquer Unidade)..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" />
+                    <input type="text" placeholder="Busca Global..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" />
                 </div>
                 
                 <div className="flex gap-2">
@@ -257,64 +322,64 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         {type.replace(/_/g, ' ')}
                     </button>
                 ))}
-                <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                <button onClick={() => setNoteFilter(noteFilter === 'with' ? 'without' : noteFilter === 'without' ? 'all' : 'with')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${noteFilter !== 'all' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-100'}`}>
-                    {noteFilter === 'with' ? 'Com Notas' : noteFilter === 'without' ? 'Sem Notas' : 'Notas: Todas'}
-                </button>
             </div>
         </div>
       </div>
       
-      {/* MODO TABELA DESKTOP: FIXED LAYOUT PARA ALINHAMENTO PERFEITO */}
-      <div className="hidden md:block glass-panel rounded-3xl border border-white/50 shadow-sm overflow-x-auto">
-        <table className="w-full text-left table-fixed min-w-[1250px] border-separate border-spacing-0">
-          <thead className="bg-gray-50/80 text-gray-500 text-[10px] uppercase font-black tracking-widest sticky top-0 z-20 backdrop-blur-md">
+      <div className="hidden md:block glass-panel rounded-3xl border border-white/50 shadow-sm overflow-x-auto relative">
+        <table className="w-full text-left border-separate border-spacing-0 table-fixed min-w-[1250px]">
+          <colgroup>
+            <col style={{ width: '130px' }} />
+            <col style={{ width: '280px' }} />
+            <col style={{ width: '140px' }} />
+            <col style={{ width: '180px' }} />
+            <col style={{ width: '320px' }} />
+            <col style={{ width: '100px' }} />
+          </colgroup>
+          <thead className="bg-gray-50/90 text-gray-500 text-[10px] uppercase font-black tracking-widest sticky top-0 z-20 backdrop-blur-md">
             <tr>
-              <th className="p-4 pl-6 cursor-pointer border-b border-gray-100 w-[140px]" onClick={() => handleSort('cte')}>CTE / SÉRIE <i className="ph ph-caret-up-down ml-1"></i></th>
-              <th className="p-4 border-b border-gray-100 w-[280px]">DESTINATÁRIO</th>
-              <th className="p-4 cursor-pointer border-b border-gray-100 w-[150px]" onClick={() => handleSort('dataLimite')}>PRAZO / LIMITE <i className="ph ph-caret-up-down ml-1"></i></th>
-              <th className="p-4 border-b border-gray-100 w-[180px]">STATUS / PAGAMENTO</th>
-              <th className="p-4 border-b border-gray-100 w-[300px]">ORIGEM / DESTINO</th>
-              <th className="p-4 text-right pr-8 border-b border-gray-100 w-[100px]">AÇÕES</th>
+              <th className="p-4 pl-6 cursor-pointer border-b border-gray-100" onClick={() => handleSort('cte')}>CTE / SÉRIE <i className="ph ph-caret-up-down ml-1"></i></th>
+              <th className="p-4 border-b border-gray-100">DESTINATÁRIO</th>
+              <th className="p-4 cursor-pointer border-b border-gray-100" onClick={() => handleSort('dataLimite')}>LIMITE <i className="ph ph-caret-up-down ml-1"></i></th>
+              <th className="p-4 border-b border-gray-100">STATUS / PAGTO</th>
+              <th className="p-4 border-b border-gray-100">ORIGEM / DESTINO</th>
+              <th className="p-4 text-right pr-8 border-b border-gray-100">AÇÕES</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50 bg-white/50 backdrop-blur-sm">
+          <tbody className="divide-y divide-gray-50 bg-white/50">
             {filteredData.map(item => {
-                const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
+                const cteNotes = notes.filter(n => n.cteId === item.id);
                 const noteCount = cteNotes.length;
-                const lastNote = cteNotes[0];
-                const isExternal = lastNote && lastNote.user !== currentUser?.username;
-                const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
+                const lastNote = [...cteNotes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date))[0];
+                const badgeColor = (lastNote && lastNote.user !== currentUser?.username) ? 'bg-red-600' : 'bg-indigo-600';
 
                 return (
                     <tr key={item.id} className="hover:bg-white/80 transition group h-20">
                         <td className="p-4 pl-6 font-bold text-primary truncate">{item.cte} / {item.serie}</td>
                         <td className="p-4">
-                            <div className="text-xs font-semibold text-gray-700 leading-snug line-clamp-2" title={item.destinatario}>
+                            <div className="text-[11px] font-semibold text-gray-700 line-clamp-2" title={item.destinatario}>
                                 {item.destinatario}
                             </div>
                         </td>
                         <td className="p-4 text-xs font-black text-gray-900">{item.dataLimite}</td>
                         <td className="p-4">
-                            <div className="flex flex-col gap-1.5 items-start">
-                                <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
-                                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${getPaymentColor(item.fretePago)}`}>
-                                  {item.fretePago}
-                                </span>
+                            <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
                             </div>
                         </td>
                         <td className="p-4">
-                            <div className="text-[10px] font-bold text-gray-500 flex items-center gap-2 flex-wrap">
+                            <div className="text-[10px] font-bold text-gray-500 flex items-center gap-1.5 flex-wrap">
                                 <span className="max-w-[130px] truncate">{item.coleta}</span>
                                 <i className="ph-bold ph-arrow-right text-indigo-300"></i>
                                 <span className="max-w-[130px] truncate text-gray-800">{item.entrega}</span>
                             </div>
                         </td>
                         <td className="p-4 text-right pr-8">
-                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-10 h-10 rounded-2xl bg-gray-100 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center ml-auto active:scale-90 group-hover:rotate-3">
+                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-10 h-10 rounded-2xl bg-gray-100 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center ml-auto active:scale-90">
                                 <i className="ph-bold ph-chat-circle-dots text-lg"></i>
                                 {noteCount > 0 && (
-                                  <span className={`absolute -top-1.5 -right-1.5 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md animate-pulse ${badgeColorClass}`}>
+                                  <span className={`absolute -top-1.5 -right-1.5 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-pulse ${badgeColor}`}>
                                     {noteCount}
                                   </span>
                                 )}
@@ -323,44 +388,26 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     </tr>
                 );
             })}
-            {filteredData.length === 0 && (
-                <tr>
-                    <td colSpan={6} className="p-24 text-center">
-                        <div className="flex flex-col items-center opacity-25">
-                            <i className="ph-duotone ph-list-magnifying-glass text-7xl mb-4"></i>
-                            <p className="font-black uppercase tracking-widest text-sm">Nenhum registro encontrado</p>
-                            <p className="text-xs mt-2 font-medium">Ajuste os filtros ou a busca global.</p>
-                        </div>
-                    </td>
-                </tr>
-            )}
           </tbody>
         </table>
       </div>
       
-      {/* MOBILE LIST VIEW: ADAPTADO PARA TELAS PEQUENAS */}
       <div className="md:hidden space-y-4">
         {filteredData.map(item => {
-            const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
+            const cteNotes = notes.filter(n => n.cteId === item.id);
             const noteCount = cteNotes.length;
-            const lastNote = cteNotes[0];
-            const isExternal = lastNote && lastNote.user !== currentUser?.username;
-            const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
-
             return (
-                <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 active:bg-gray-50 transition" onClick={() => setSelectedCteId(item.id)}>
-                    <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1"><p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-0.5">CTE / SÉRIE</p><h4 className="font-black text-primary text-base leading-tight">{item.cte} / {item.serie}</h4></div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                            <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-tighter shadow-sm ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
-                            <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
-                        </div>
+                <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 active:bg-gray-50" onClick={() => setSelectedCteId(item.id)}>
+                    <div className="flex justify-between mb-3">
+                        <h4 className="font-black text-primary text-base">{item.cte} / {item.serie}</h4>
+                        <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
                     </div>
-                    <div className="mb-4 text-[11px] font-bold text-gray-600 line-clamp-1"><p className="text-[8px] font-black uppercase text-gray-400 tracking-widest mb-0.5">DESTINATÁRIO</p>{item.destinatario}</div>
-                    <div className="flex justify-between items-end"><div className="flex flex-col"><span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">LIMITE</span><span className="text-sm font-black text-gray-900">{item.dataLimite}</span></div>
-                        <div className="relative w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shadow-sm">
+                    <div className="text-[11px] font-bold text-gray-600 mb-3">{item.coleta} &rarr; {item.entrega}</div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-gray-900">{item.dataLimite}</span>
+                        <div className="relative w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                             <i className="ph-bold ph-chat-circle-dots text-xl"></i>
-                            {noteCount > 0 && <span className={`absolute -top-1.5 -right-1.5 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-pulse ${badgeColorClass}`}>{noteCount}</span>}
+                            {noteCount > 0 && <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full">{noteCount}</span>}
                         </div>
                     </div>
                 </div>
