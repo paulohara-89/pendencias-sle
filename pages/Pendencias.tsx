@@ -170,38 +170,38 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             c.destinatario?.toLowerCase().includes(term)
         );
     } else {
-        // 1. Filtro de Unidade Destino (Barra)
-        if (selectedDestUnit !== 'all') {
-            data = data.filter(c => c.entrega === selectedDestUnit);
-        }
-
-        // 2. Filtro de Fluxo (Correção da Saída)
+        // --- FILTRO DE FLUXO (PRIORIDADE) ---
         if (!isGlobalUser && flowFilter !== 'all') {
             const myDest = currentUser?.linkedDestUnit;
             const myOrigin = currentUser?.linkedOriginUnit;
             
             if (flowFilter === 'inbound') {
-                if (myDest) data = data.filter(c => c.entrega === myDest);
+                // Chegada: filtro pela entrega vinculada ao usuário ou pela seleção da barra
+                if (selectedDestUnit !== 'all') {
+                    data = data.filter(c => c.entrega === selectedDestUnit);
+                } else if (myDest) {
+                    data = data.filter(c => c.entrega === myDest);
+                }
             } else if (flowFilter === 'outbound') {
-                // Filtra pela coluna de ORIGEM (COLETA - Coluna H da aba BASE)
-                // Usamos includes e toLowerCase para ser robusto
+                // Saída: Ignora Unidade Destino (Barra) e foca na Origem (Coleta)
                 if (myOrigin) {
                     data = data.filter(c => c.coleta.toLowerCase().includes(myOrigin.toLowerCase()));
                 }
+            }
+        } else {
+            // Se for global user ou filtro 'all'
+            if (selectedDestUnit !== 'all') {
+                data = data.filter(c => c.entrega === selectedDestUnit);
             }
         }
     }
 
     // --- SEGREGAÇÃO ABSOLUTA DE STATUS ---
     if (mode === 'critical') {
-        // Aba Críticos: EXCLUSIVAMENTE CRITICO
         data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
     } else if (mode === 'search') {
-        // Aba Em Busca: EXCLUSIVAMENTE EM BUSCA
         data = data.filter(c => c.status === 'EM BUSCA');
     } else {
-        // Aba Pendências: NO_PRAZO, VENCE_AMANHA, PRIORIDADE, FORA_DO_PRAZO. 
-        // EXCLUI Críticos e EXCLUI Em Busca.
         data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
     }
 
@@ -244,7 +244,6 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         </select>
                     ) : (
                         <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={flowFilter} onChange={(e) => setFlowFilter(e.target.value as any)}>
-                            <option value="all">FLUXO: TODOS</option>
                             <option value="inbound">CHEGADA (DESTINO)</option>
                             <option value="outbound">SAÍDA (ORIGEM)</option>
                         </select>
@@ -266,47 +265,52 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         </div>
       </div>
       
-      <div className="hidden md:block glass-panel rounded-3xl overflow-hidden border border-white/50 shadow-sm overflow-x-auto">
-        <table className="w-full text-left min-w-[1100px]">
-          <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase font-black tracking-widest border-b border-gray-100">
+      <div className="hidden md:block glass-panel rounded-3xl border border-white/50 shadow-sm overflow-x-auto overflow-y-visible">
+        <table className="w-full text-left table-auto min-w-[1200px]">
+          <thead className="bg-gray-50/80 text-gray-500 text-[10px] uppercase font-black tracking-widest border-b border-gray-100 sticky top-0 z-10">
             <tr>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('cte')}>CTE / SÉRIE <i className="ph ph-caret-up-down"></i></th>
-              <th className="p-5">DESTINATÁRIO</th>
-              <th className="p-5 cursor-pointer" onClick={() => handleSort('dataLimite')}>PRAZO / LIMITE <i className="ph ph-caret-up-down"></i></th>
-              <th className="p-5">STATUS / PAGAMENTO</th>
-              <th className="p-5">ORIGEM / DESTINO</th>
-              <th className="p-5 text-right">AÇÕES</th>
+              <th className="p-5 cursor-pointer whitespace-nowrap" style={{ width: '180px' }} onClick={() => handleSort('cte')}>CTE / SÉRIE <i className="ph ph-caret-up-down ml-1"></i></th>
+              <th className="p-5 whitespace-nowrap" style={{ minWidth: '250px' }}>DESTINATÁRIO</th>
+              <th className="p-5 cursor-pointer whitespace-nowrap" style={{ width: '180px' }} onClick={() => handleSort('dataLimite')}>PRAZO / LIMITE <i className="ph ph-caret-up-down ml-1"></i></th>
+              <th className="p-5 whitespace-nowrap" style={{ width: '200px' }}>STATUS / PAGAMENTO</th>
+              <th className="p-5 whitespace-nowrap" style={{ minWidth: '250px' }}>ORIGEM / DESTINO</th>
+              <th className="p-5 text-right pr-6 whitespace-nowrap" style={{ width: '100px' }}>AÇÕES</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 bg-white/50 backdrop-blur-sm">
             {filteredData.map(item => {
                 const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
                 const noteCount = cteNotes.length;
-                
-                // --- LÓGICA DE COR DA NOTIFICAÇÃO ---
                 const lastNote = cteNotes[0];
                 const isExternal = lastNote && lastNote.user !== currentUser?.username;
                 const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
 
                 return (
-                    <tr key={item.id} className="hover:bg-white transition group">
+                    <tr key={item.id} className="hover:bg-white/80 transition group h-20">
                         <td className="p-5 font-bold text-primary">{item.cte} / {item.serie}</td>
-                        <td className="p-5 text-sm font-medium text-gray-700 truncate max-w-[200px]">{item.destinatario}</td>
+                        <td className="p-5">
+                            <div className="max-w-[240px] truncate text-sm font-medium text-gray-700" title={item.destinatario}>
+                                {item.destinatario}
+                            </div>
+                        </td>
                         <td className="p-5 text-sm font-bold text-gray-900">{item.dataLimite}</td>
                         <td className="p-5">
                             <div className="flex flex-col gap-1.5 items-start">
                                 <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
-                                <button 
-                                  onClick={() => togglePaymentFilter(item.fretePago)}
-                                  className={`px-2.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest transition-transform hover:scale-105 active:scale-95 ${getPaymentColor(item.fretePago)}`}
-                                >
+                                <span className={`px-2.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${getPaymentColor(item.fretePago)}`}>
                                   {item.fretePago}
-                                </button>
+                                </span>
                             </div>
                         </td>
-                        <td className="p-5 text-[10px] font-bold text-gray-500"><div className="flex items-center gap-1.5"><span className="truncate max-w-[100px]">{item.coleta}</span><i className="ph-bold ph-arrow-right text-indigo-300"></i><span className="truncate max-w-[100px] text-gray-700">{item.entrega}</span></div></td>
-                        <td className="p-5 text-right">
-                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-11 h-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-100 flex items-center justify-center ml-auto hover:rotate-3">
+                        <td className="p-5">
+                            <div className="text-[10px] font-bold text-gray-500 flex items-center gap-1.5 flex-wrap">
+                                <span className="max-w-[120px] truncate">{item.coleta}</span>
+                                <i className="ph-bold ph-arrow-right text-indigo-300"></i>
+                                <span className="max-w-[120px] truncate text-gray-700">{item.entrega}</span>
+                            </div>
+                        </td>
+                        <td className="p-5 text-right pr-6">
+                            <button onClick={() => setSelectedCteId(item.id)} className="relative w-11 h-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-100 flex items-center justify-center ml-auto group-hover:rotate-3 active:scale-90">
                                 <i className="ph-bold ph-chat-circle-dots text-lg"></i>
                                 {noteCount > 0 && (
                                   <span className={`absolute -top-1.5 -right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md animate-pulse ${badgeColorClass}`}>
@@ -318,10 +322,22 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     </tr>
                 );
             })}
+            {filteredData.length === 0 && (
+                <tr>
+                    <td colSpan={6} className="p-20 text-center">
+                        <div className="flex flex-col items-center opacity-30">
+                            <i className="ph-duotone ph-magnifying-glass text-6xl mb-4"></i>
+                            <p className="font-bold uppercase tracking-widest text-sm">Nenhum documento encontrado</p>
+                            <p className="text-xs mt-1">Verifique os filtros aplicados</p>
+                        </div>
+                    </td>
+                </tr>
+            )}
           </tbody>
         </table>
       </div>
       
+      {/* MOBILE LIST VIEW */}
       <div className="md:hidden space-y-4">
         {filteredData.map(item => {
             const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
@@ -331,7 +347,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
 
             return (
-                <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100" onClick={() => setSelectedCteId(item.id)}>
+                <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 active:scale-95 transition" onClick={() => setSelectedCteId(item.id)}>
                     <div className="flex justify-between items-start mb-3">
                         <div><p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-0.5">CTE / SÉRIE</p><h4 className="font-black text-primary text-lg leading-tight">{item.cte} / {item.serie}</h4></div>
                         <div className="flex flex-col items-end gap-1">
@@ -339,7 +355,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                             <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
                         </div>
                     </div>
-                    <div className="mb-4 text-xs font-bold text-gray-700"><p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-0.5">ORIGEM &rarr; DESTINO</p>{item.coleta} &rarr; {item.entrega}</div>
+                    <div className="mb-4 text-xs font-bold text-gray-700 truncate max-w-full"><p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-0.5">ORIGEM &rarr; DESTINO</p>{item.coleta} &rarr; {item.entrega}</div>
                     <div className="flex justify-between items-end"><div className="flex flex-col"><span className="text-[9px] font-black text-gray-400 uppercase">LIMITE</span><span className="text-sm font-bold text-gray-800">{item.dataLimite}</span></div>
                         <div className="relative w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
                             <i className="ph-bold ph-chat-circle-dots text-xl"></i>
