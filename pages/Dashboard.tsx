@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
@@ -27,9 +28,9 @@ export const Dashboard = () => {
   const [offenderSort, setOffenderSort] = useState<'metric' | 'name'>('metric'); 
   
   // Efficiency Sort State
-  const [efficiencySort, setEfficiencySort] = useState<'asc' | 'desc' | 'vol'>('asc'); // asc = Piores primeiro (Ofensores)
+  const [efficiencySort, setEfficiencySort] = useState<'asc' | 'desc' | 'vol'>('asc'); 
 
-  const [activeIndex, setActiveIndex] = useState(0); // For Pie Chart hover
+  const [activeIndex, setActiveIndex] = useState(0); 
   
   // Responsive State for Chart Layout
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -40,7 +41,9 @@ export const Dashboard = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const isAdmin = currentUser?.role.toLowerCase() === 'admin';
+  const role = currentUser?.role.toLowerCase();
+  const isAdmin = role === 'admin';
+  const isGlobalUser = isAdmin || role === 'leitor' || (!currentUser?.linkedOriginUnit && !currentUser?.linkedDestUnit);
 
   // Extract Unique Destination Units
   const destinationUnits = useMemo(() => {
@@ -48,14 +51,13 @@ export const Dashboard = () => {
     return Array.from(units).sort();
   }, [ctes]);
 
-  // Set default unit for non-admins
+  // Set default unit for non-global users
   useEffect(() => {
-    if (!isAdmin && currentUser?.linkedDestUnit) {
+    if (!isGlobalUser && currentUser?.linkedDestUnit) {
         setSelectedDestUnit(currentUser.linkedDestUnit);
     }
-  }, [currentUser, isAdmin]);
+  }, [currentUser, isGlobalUser]);
 
-  // Helper to toggle array items
   const toggleFilter = (item: string, current: string[], setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (current.includes(item)) {
       setter(current.filter(i => i !== item));
@@ -64,15 +66,14 @@ export const Dashboard = () => {
     }
   };
 
-  // Apply Filters
   const filteredCtes = useMemo(() => {
     let data = ctes;
 
     // 1. User Role Scope
-    if (!isAdmin) {
+    if (!isGlobalUser) {
       data = data.filter(c => 
-        (currentUser.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) ||
-        (currentUser.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) ||
+        (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) ||
+        (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) ||
         c.status === 'EM BUSCA'
       );
     }
@@ -96,7 +97,7 @@ export const Dashboard = () => {
     }
 
     return data;
-  }, [ctes, currentUser, selectedDestUnit, statusFilters, paymentFilters, isAdmin]);
+  }, [ctes, currentUser, selectedDestUnit, statusFilters, paymentFilters, isGlobalUser]);
 
   // KPIs
   const kpis = {
@@ -110,7 +111,6 @@ export const Dashboard = () => {
     emBusca: filteredCtes.filter(c => c.status === 'EM BUSCA' || c.justificativa?.toUpperCase().includes('BUSCA')).length
   };
 
-  // Status Chart Data (Pie)
   const statusData = [
     { name: 'Crítico', value: kpis.critico, color: '#ef4444', key: 'CRITICO' },
     { name: 'Fora Prazo', value: kpis.foraPrazo, color: '#f87171', key: 'FORA_DO_PRAZO' },
@@ -119,25 +119,16 @@ export const Dashboard = () => {
     { name: 'No Prazo', value: kpis.noPrazo, color: '#06b6d4', key: 'NO_PRAZO' },
   ].filter(d => d.value > 0); 
 
-  // Efficiency Calculation
   const efficiencyData = useMemo(() => {
-      // Determine grouping key based on filter context
       const groupByKey = (selectedDestUnit === 'all') ? 'entrega' : 'coleta';
-      
       const groups: Record<string, { positive: number; negative: number; total: number }> = {};
 
       filteredCtes.forEach(c => {
           const rawKey = c[groupByKey];
           if (!rawKey) return;
-          
-          // Clean key name for chart display - keep shorter for X-Axis
           const key = rawKey.length > 25 ? rawKey.substring(0, 25) + '...' : rawKey;
-          
           if (!groups[key]) groups[key] = { positive: 0, negative: 0, total: 0 };
-          
           const status = c.computedStatus;
-          
-          // Categorize Logic
           if (['NO_PRAZO', 'VENCE_AMANHA', 'PRIORIDADE'].includes(status || '')) {
               groups[key].positive++;
               groups[key].total++;
@@ -157,18 +148,16 @@ export const Dashboard = () => {
           }))
           .filter(d => d.total > 0)
           .sort((a, b) => {
-              if (efficiencySort === 'vol') return b.total - a.total; // Biggest Volume
-              if (efficiencySort === 'asc') return (a.efficiency - b.efficiency) || (b.total - a.total); // Worst Efficiency (Offenders), break ties with volume
-              return (b.efficiency - a.efficiency) || (b.total - a.total); // Best Efficiency
+              if (efficiencySort === 'vol') return b.total - a.total; 
+              if (efficiencySort === 'asc') return (a.efficiency - b.efficiency) || (b.total - a.total); 
+              return (b.efficiency - a.efficiency) || (b.total - a.total); 
           })
-          .slice(0, 15); // LIMIT TO TOP 15 to avoid layout breaking
-
+          .slice(0, 15); 
   }, [filteredCtes, selectedDestUnit, efficiencySort]);
 
-  // Offending Data
   const offendersData = useMemo(() => {
      const grouped = filteredCtes.reduce<Record<string, AgencyMetric>>((acc, curr) => {
-        const key = isAdmin ? (curr.coleta || 'Desconhecida') : (curr.destinatario || 'Consumidor');
+        const key = isGlobalUser ? (curr.coleta || 'Desconhecida') : (curr.destinatario || 'Consumidor');
         const cleanKey = key.length > 35 ? key.substring(0, 35) + '...' : key;
         
         if (!acc[key]) acc[key] = { name: cleanKey, volume: 0, value: 0 };
@@ -189,11 +178,10 @@ export const Dashboard = () => {
      return list
         .sort((a, b) => offenderMetric === 'volume' ? b.volume - a.volume : b.value - a.value)
         .slice(0, 10); 
-  }, [filteredCtes, offenderMetric, isAdmin, offenderSort]);
+  }, [filteredCtes, offenderMetric, isGlobalUser, offenderSort]);
 
   const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 
-  // Pie Chart Active Shape
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
@@ -221,17 +209,14 @@ export const Dashboard = () => {
     );
   };
 
-  // Color logic for efficiency bars
   const getEfficiencyColor = (value: number) => {
-      if (value >= 90) return '#10b981'; // Green
-      if (value >= 70) return '#f59e0b'; // Orange
-      return '#ef4444'; // Red
+      if (value >= 90) return '#10b981'; 
+      if (value >= 70) return '#f59e0b'; 
+      return '#ef4444'; 
   };
 
   return (
     <div className="space-y-6 animate-fade-in pb-20 max-w-[1800px] mx-auto">
-      
-      {/* Header & Main Filters */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-gray-100 shadow-sm sticky top-0 z-20 backdrop-blur-md bg-white/90">
          <div>
             <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Visão Geral</h2>
@@ -239,12 +224,11 @@ export const Dashboard = () => {
          </div>
 
          <div className="flex flex-col md:flex-row gap-4 w-full lg:w-auto">
-             {/* Unit Selector */}
              <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 w-full md:w-auto">
                 <i className="ph-fill ph-map-pin text-indigo-500"></i>
                 <div className="flex flex-col flex-1 md:flex-none">
                   <span className="text-[10px] font-bold text-gray-400 uppercase">Unidade Destino</span>
-                  {isAdmin ? (
+                  {isGlobalUser ? (
                     <select 
                       value={selectedDestUnit}
                       onChange={(e) => setSelectedDestUnit(e.target.value)}
@@ -263,7 +247,6 @@ export const Dashboard = () => {
                 </div>
              </div>
 
-             {/* Payment Filter */}
              <div className="flex items-center gap-2 bg-gray-50 px-2 py-2 rounded-xl border border-gray-100 overflow-x-auto no-scrollbar w-full md:w-auto">
                 {['CIF', 'FOB', 'FATURAR REMETENTE', 'FATURAR DEST'].map(type => (
                    <button
@@ -282,7 +265,6 @@ export const Dashboard = () => {
          </div>
       </div>
 
-      {/* KPI Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard 
            title="Pendências Totais" 
@@ -317,10 +299,7 @@ export const Dashboard = () => {
         />
       </div>
 
-      {/* MAIN ANALYTICS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Efficiency Chart - Vertical Layout */}
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[500px]">
               <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shrink-0">
                  <div>
@@ -331,51 +310,19 @@ export const Dashboard = () => {
                         Top 15 unidades/agências baseadas na % de entregas no prazo.
                     </p>
                  </div>
-                 
                  <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-xl self-start flex-wrap">
-                     <button 
-                         onClick={() => setEfficiencySort('asc')}
-                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                         title="Mostrar piores primeiro (Ofensores)"
-                     >
-                         Ofensores
-                     </button>
-                     <button 
-                         onClick={() => setEfficiencySort('desc')}
-                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'desc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                         title="Mostrar melhores primeiro"
-                     >
-                         Melhores
-                     </button>
-                     <button 
-                         onClick={() => setEfficiencySort('vol')}
-                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                         title="Mostrar maior volume primeiro"
-                     >
-                         Volume
-                     </button>
+                     <button onClick={() => setEfficiencySort('asc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Ofensores</button>
+                     <button onClick={() => setEfficiencySort('desc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'desc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Melhores</button>
+                     <button onClick={() => setEfficiencySort('vol')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Volume</button>
                  </div>
               </div>
 
-              {/* Chart Container */}
               <div className="flex-1 w-full relative min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                        layout="vertical"
-                        data={efficiencyData}
-                        margin={{ top: 5, right: 30, bottom: 5, left: 0 }}
-                        barSize={20}
-                    >
+                    <BarChart layout="vertical" data={efficiencyData} margin={{ top: 5, right: 30, bottom: 5, left: 0 }} barSize={20}>
                         <CartesianGrid stroke="#f3f4f6" horizontal={true} vertical={false} strokeDasharray="3 3" />
                         <XAxis type="number" domain={[0, 100]} hide />
-                        <YAxis 
-                            type="category" 
-                            dataKey="name" 
-                            width={150}
-                            tick={{fontSize: 11, fill: '#6b7280', fontWeight: 600}}
-                            axisLine={false}
-                            tickLine={false}
-                        />
+                        <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 11, fill: '#6b7280', fontWeight: 600}} axisLine={false} tickLine={false} />
                         <Tooltip 
                             cursor={{ fill: 'rgba(0,0,0,0.02)' }}
                             content={({ active, payload }) => {
@@ -385,22 +332,8 @@ export const Dashboard = () => {
                                     <div className="bg-white p-3 rounded-xl shadow-xl border border-gray-100 text-xs z-50">
                                         <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{data.name}</p>
                                         <div className="space-y-1">
-                                            <div className="flex justify-between gap-6">
-                                                <span className="text-gray-500">Eficiência:</span>
-                                                <span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span>
-                                            </div>
-                                            <div className="flex justify-between gap-6">
-                                                <span className="text-gray-500">Volume Total:</span>
-                                                <span className="font-bold text-gray-800">{data.total}</span>
-                                            </div>
-                                            <div className="flex justify-between gap-6">
-                                                <span className="text-gray-500">No Prazo:</span>
-                                                <span className="font-bold text-green-600">{data.positive}</span>
-                                            </div>
-                                            <div className="flex justify-between gap-6">
-                                                <span className="text-gray-500">Atrasado/Crítico:</span>
-                                                <span className="font-bold text-red-500">{data.negative}</span>
-                                            </div>
+                                            <div className="flex justify-between gap-6"><span className="text-gray-500">Eficiência:</span><span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span></div>
+                                            <div className="flex justify-between gap-6"><span className="text-gray-500">Volume Total:</span><span className="font-bold text-gray-800">{data.total}</span></div>
                                         </div>
                                     </div>
                                 );
@@ -418,29 +351,15 @@ export const Dashboard = () => {
               </div>
           </div>
 
-          {/* Status Distribution (Donut) */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[500px]">
                 <div className="mb-4">
                    <h3 className="font-bold text-lg text-gray-800">Status Global</h3>
                    <p className="text-xs text-gray-500">Distribuição percentual da carteira.</p>
                 </div>
-
                 <div className="flex-1 flex items-center justify-center relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                        <Pie
-                            activeIndex={activeIndex}
-                            activeShape={renderActiveShape}
-                            data={statusData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={70}
-                            outerRadius={90}
-                            fill="#8884d8"
-                            dataKey="value"
-                            onMouseEnter={onPieEnter}
-                            paddingAngle={3}
-                        >
+                        <Pie activeIndex={activeIndex} activeShape={renderActiveShape} data={statusData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} fill="#8884d8" dataKey="value" onMouseEnter={onPieEnter} paddingAngle={3}>
                             {statusData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} stroke="none" cursor="pointer" onClick={() => toggleFilter(entry.key, statusFilters, setStatusFilters)} />
                             ))}
@@ -448,15 +367,9 @@ export const Dashboard = () => {
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
-                
-                {/* Legend for Donut */}
                 <div className="grid grid-cols-2 gap-2 mt-auto">
                     {statusData.map((status) => (
-                        <button
-                            key={status.key}
-                            onClick={() => toggleFilter(status.key, statusFilters, setStatusFilters)}
-                            className={`flex items-center gap-2 p-2 rounded-lg border text-[10px] font-bold transition ${statusFilters.includes(status.key) ? 'bg-gray-100 border-gray-300' : 'bg-white border-transparent hover:bg-gray-50'}`}
-                        >
+                        <button key={status.key} onClick={() => toggleFilter(status.key, statusFilters, setStatusFilters)} className={`flex items-center gap-2 p-2 rounded-lg border text-[10px] font-bold transition ${statusFilters.includes(status.key) ? 'bg-gray-100 border-gray-300' : 'bg-white border-transparent hover:bg-gray-50'}`}>
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: status.color }}></span>
                             <span className="truncate text-gray-600">{status.name}</span>
                             <span className="ml-auto text-gray-400">{status.value}</span>
@@ -466,125 +379,39 @@ export const Dashboard = () => {
           </div>
       </div>
 
-      {/* Offenders Section */}
       <div className="bg-white p-4 sm:p-6 rounded-3xl border border-gray-100 shadow-sm">
          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 border-b border-gray-50 pb-4">
-             <div>
-                <h3 className="text-lg font-bold text-gray-800">
-                    {isAdmin ? 'Agências Ofensoras' : 'Principais Clientes Ofensores'} <span className="text-gray-400 text-sm font-normal">(Top 10)</span>
-                </h3>
-             </div>
-             
+             <div><h3 className="text-lg font-bold text-gray-800">{isGlobalUser ? 'Agências Ofensoras' : 'Principais Clientes Ofensores'} <span className="text-gray-400 text-sm font-normal">(Top 10)</span></h3></div>
              <div className="flex gap-3 bg-gray-50 p-1 rounded-xl flex-wrap w-full xl:w-auto">
                  <div className="flex bg-white rounded-lg shadow-sm flex-1 xl:flex-none justify-center">
-                    <button 
-                        onClick={() => setOffenderViewMode('chart')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${offenderViewMode === 'chart' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                        <i className="ph-bold ph-chart-bar"></i> Gráfico
-                    </button>
-                    <button 
-                        onClick={() => setOffenderViewMode('list')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${offenderViewMode === 'list' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                        <i className="ph-bold ph-list-dashes"></i> Lista
-                    </button>
+                    <button onClick={() => setOffenderViewMode('chart')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${offenderViewMode === 'chart' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}><i className="ph-bold ph-chart-bar"></i> Gráfico</button>
+                    <button onClick={() => setOffenderViewMode('list')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${offenderViewMode === 'list' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}><i className="ph-bold ph-list-dashes"></i> Lista</button>
                  </div>
-                 
-                 <div className="w-px bg-gray-200 my-1 hidden xl:block"></div>
-
                  <div className="flex bg-white rounded-lg shadow-sm flex-1 xl:flex-none justify-center">
-                    <button 
-                        onClick={() => setOffenderMetric('volume')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${offenderMetric === 'volume' ? 'text-primary' : 'text-gray-400'}`}
-                    >
-                        Vol
-                    </button>
-                    <button 
-                        onClick={() => setOffenderMetric('value')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${offenderMetric === 'value' ? 'text-primary' : 'text-gray-400'}`}
-                    >
-                        R$
-                    </button>
+                    <button onClick={() => setOffenderMetric('volume')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${offenderMetric === 'volume' ? 'text-primary' : 'text-gray-400'}`}>Vol</button>
+                    <button onClick={() => setOffenderMetric('value')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${offenderMetric === 'value' ? 'text-primary' : 'text-gray-400'}`}>R$</button>
                  </div>
-
-                 <div className="w-px bg-gray-200 my-1 hidden xl:block"></div>
-                 
                  <div className="flex bg-white rounded-lg shadow-sm flex-1 xl:flex-none justify-center">
-                     <button 
-                         onClick={() => setOffenderSort(offenderSort === 'metric' ? 'name' : 'metric')}
-                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 text-gray-500 hover:text-primary ${offenderSort === 'name' ? 'text-primary bg-indigo-50' : ''}`}
-                         title={offenderSort === 'name' ? "Ordenado por Nome (A-Z)" : "Ordenado por Volume/Valor (Maior-Menor)"}
-                     >
-                         <i className={`ph-bold ${offenderSort === 'name' ? 'ph-sort-ascending' : 'ph-sort-descending'}`}></i> 
-                         {offenderSort === 'name' ? 'A-Z' : 'Top'}
-                     </button>
+                     <button onClick={() => setOffenderSort(offenderSort === 'metric' ? 'name' : 'metric')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 text-gray-500 hover:text-primary ${offenderSort === 'name' ? 'text-primary bg-indigo-50' : ''}`}><i className={`ph-bold ${offenderSort === 'name' ? 'ph-sort-ascending' : 'ph-sort-descending'}`}></i> {offenderSort === 'name' ? 'A-Z' : 'Top'}</button>
                  </div>
              </div>
          </div>
-
          <div className="min-h-[350px]">
             {offenderViewMode === 'chart' ? (
                 <ResponsiveContainer width="100%" height={350}>
                     <BarChart data={offendersData} layout="vertical" margin={{ left: 0, right: 30, top: 10, bottom: 10 }}>
-                        <XAxis type="number" hide />
-                        <YAxis 
-                            dataKey="name" 
-                            type="category" 
-                            width={isMobile ? 100 : 180} 
-                            tick={({ x, y, payload }) => (
-                                <g transform={`translate(${x},${y})`}>
-                                    <text x={0} y={0} dy={4} textAnchor="end" fill="#6b7280" fontSize={isMobile ? 10 : 11} fontWeight={500}>
-                                        {payload.value.length > (isMobile ? 15 : 25) ? `${payload.value.substring(0, (isMobile ? 15 : 25))}...` : payload.value}
-                                    </text>
-                                </g>
-                            )}
-                            interval={0}
-                        />
-                        <Tooltip 
-                            cursor={{fill: '#F8F9FC'}} 
-                            contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}
-                            formatter={(value: number) => [
-                                offenderMetric === 'value' ? formatCurrency(value) : value, 
-                                offenderMetric === 'value' ? 'Faturamento' : 'Volume'
-                            ]}
-                        />
-                        <Bar 
-                            dataKey={offenderMetric} 
-                            radius={[0, 6, 6, 0]} 
-                            barSize={isMobile ? 15 : 20}
-                        >
-                            {offendersData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={offenderMetric === 'volume' ? '#6366f1' : '#10b981'} />
-                            ))}
-                        </Bar>
+                        <XAxis type="number" hide /><YAxis dataKey="name" type="category" width={isMobile ? 100 : 180} tick={({ x, y, payload }) => (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={4} textAnchor="end" fill="#6b7280" fontSize={isMobile ? 10 : 11} fontWeight={500}>{payload.value.length > (isMobile ? 15 : 25) ? `${payload.value.substring(0, (isMobile ? 15 : 25))}...` : payload.value}</text></g>)} interval={0} />
+                        <Tooltip cursor={{fill: '#F8F9FC'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}} formatter={(value: number) => [offenderMetric === 'value' ? formatCurrency(value) : value, offenderMetric === 'value' ? 'Faturamento' : 'Volume']} />
+                        <Bar dataKey={offenderMetric} radius={[0, 6, 6, 0]} barSize={isMobile ? 15 : 20}>{offendersData.map((entry, index) => (<Cell key={`cell-${index}`} fill={offenderMetric === 'volume' ? '#6366f1' : '#10b981'} />))}</Bar>
                     </BarChart>
                 </ResponsiveContainer>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[500px]">
                         <thead className="bg-gray-50 text-gray-400 text-[10px] uppercase font-bold tracking-wider">
-                            <tr>
-                                <th className="p-3 pl-4 rounded-l-lg cursor-pointer hover:bg-gray-100" onClick={() => setOffenderSort('name')}>
-                                    Nome do Cliente/Agência {offenderSort === 'name' && <i className="ph-bold ph-caret-up inline ml-1"></i>}
-                                </th>
-                                <th className="p-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => { setOffenderMetric('volume'); setOffenderSort('metric'); }}>
-                                    Volume {offenderMetric === 'volume' && offenderSort === 'metric' && <i className="ph-bold ph-caret-down inline ml-1"></i>}
-                                </th>
-                                <th className="p-3 text-right rounded-r-lg cursor-pointer hover:bg-gray-100" onClick={() => { setOffenderMetric('value'); setOffenderSort('metric'); }}>
-                                    Faturamento {offenderMetric === 'value' && offenderSort === 'metric' && <i className="ph-bold ph-caret-down inline ml-1"></i>}
-                                </th>
-                            </tr>
+                            <tr><th className="p-3 pl-4 rounded-l-lg" onClick={() => setOffenderSort('name')}>Nome {offenderSort === 'name' && <i className="ph-bold ph-caret-up inline ml-1"></i>}</th><th className="p-3 text-right" onClick={() => { setOffenderMetric('volume'); setOffenderSort('metric'); }}>Volume</th><th className="p-3 text-right rounded-r-lg" onClick={() => { setOffenderMetric('value'); setOffenderSort('metric'); }}>Faturamento</th></tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {offendersData.map((item, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50 transition group">
-                                    <td className="p-3 pl-4 text-sm font-medium text-gray-700 group-hover:text-primary break-words max-w-[200px]">{item.name}</td>
-                                    <td className="p-3 text-right font-bold text-gray-600 whitespace-nowrap">{item.volume}</td>
-                                    <td className="p-3 text-right font-bold text-green-600 whitespace-nowrap">{formatCurrency(item.value)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
+                        <tbody className="divide-y divide-gray-50">{offendersData.map((item, idx) => (<tr key={idx} className="hover:bg-gray-50 transition group"><td className="p-3 pl-4 text-sm font-medium text-gray-700">{item.name}</td><td className="p-3 text-right font-bold text-gray-600">{item.volume}</td><td className="p-3 text-right font-bold text-green-600">{formatCurrency(item.value)}</td></tr>))}</tbody>
                     </table>
                 </div>
             )}
@@ -595,25 +422,11 @@ export const Dashboard = () => {
 };
 
 const KPICard = ({ title, value, icon, color, borderColor = 'border-transparent', active, onClick }: any) => (
-  <div 
-    onClick={onClick}
-    className={`p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between h-36 relative overflow-hidden group cursor-pointer ${
-      active 
-      ? `bg-white border-primary ring-2 ring-primary/10 shadow-lg transform -translate-y-1` 
-      : 'bg-white border-gray-100 hover:border-gray-300 hover:shadow-md'
-    }`}
-  >
+  <div onClick={onClick} className={`p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between h-36 relative overflow-hidden group cursor-pointer ${active ? `bg-white border-primary ring-2 ring-primary/10 shadow-lg transform -translate-y-1` : 'bg-white border-gray-100 hover:border-gray-300 hover:shadow-md'}`}>
     <div className="flex justify-between items-start z-10">
-      <div>
-        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">{title}</p>
-        <h3 className="text-3xl font-bold text-gray-900 tracking-tight">{value}</h3>
-      </div>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color} transition-transform group-hover:scale-110`}>
-        <i className={`ph-fill ${icon} text-2xl`}></i>
-      </div>
+      <div><p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">{title}</p><h3 className="text-3xl font-bold text-gray-900 tracking-tight">{value}</h3></div>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color} transition-transform group-hover:scale-110`}><i className={`ph-fill ${icon} text-2xl`}></i></div>
     </div>
-    
-    {/* Decorative background circle */}
     <div className={`absolute -bottom-4 -right-4 w-24 h-24 rounded-full opacity-10 ${color.split(' ')[0].replace('text', 'bg')}`}></div>
   </div>
 );

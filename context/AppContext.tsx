@@ -53,7 +53,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
   const [alertCteId, setAlertCteId] = useState<string | null>(null);
   const [selectedCteId, setSelectedCteId] = useState<string | null>(null);
   
-  // Initialize triggered alerts from LocalStorage to persist across refreshes
   const [sessionTriggeredAlerts, setSessionTriggeredAlerts] = useState<Set<string>>(() => {
     try {
         const saved = localStorage.getItem('triggeredAlerts');
@@ -100,28 +99,30 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
       const today = parseDate(data.config.dataHoje) || new Date();
       
       const processedCTEs = data.ctes.map(c => {
-        // Sort notes by DATE (Newest first)
         const cteNotes = data.notes.filter(n => n.cteId === c.id);
+        // Sort newest first
         cteNotes.sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
         
         let finalStatus = c.status;
 
-        // Logic to determine if "EM BUSCA" is active
-        const lastDefiningNote = cteNotes.find(n => n.statusBusca === true || n.text.toLowerCase().includes('localizada') || n.text.toLowerCase().includes('resolvido'));
+        // Optimized Resolution Logic: Find the LATEST note that changes "EM BUSCA" state
+        const lastDefiningNote = cteNotes.find(n => 
+          n.statusBusca === true || 
+          n.text.toUpperCase().includes('LOCALIZADA') || 
+          n.text.toUpperCase().includes('RESOLVIDO')
+        );
 
         if (lastDefiningNote) {
-            if (lastDefiningNote.statusBusca) {
+            if (lastDefiningNote.statusBusca === true) {
                  finalStatus = 'EM BUSCA';
-            } else if (lastDefiningNote.text.toLowerCase().includes('localizada') || lastDefiningNote.text.toLowerCase().includes('resolvido')) {
-                 finalStatus = 'MERCADORIA LOCALIZADA'; // Consider resolved
+            } else {
+                 finalStatus = 'MERCADORIA LOCALIZADA';
             }
         } else {
-             // Fallback: If the base sheet (BASE tab) says it's active
              if (c.status === 'EM BUSCA') finalStatus = 'EM BUSCA';
         }
         
-        // Hard override from sheet if present in BASE tab as LOCALIZADA
-        if (c.status === 'MERCADORIA LOCALIZADA') {
+        if (c.status === 'MERCADORIA LOCALIZADA' || c.status === 'RESOLVIDO') {
             finalStatus = 'MERCADORIA LOCALIZADA';
         }
 
@@ -146,7 +147,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
         loading: false
       }));
 
-      // Alert Logic
       if (state.currentUser) {
           const emBuscaItems = processedCTEs.filter(c => c.status === 'EM BUSCA');
           
@@ -154,7 +154,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
               const userHasReplied = data.notes.some(n => n.cteId === item.id && n.user === state.currentUser?.username);
               
               if (!userHasReplied) {
-                  // Alert only triggers if not currently active AND not previously triggered in history (localStorage)
                   if (!alertActive && !sessionTriggeredAlerts.has(item.id)) {
                       triggerAlert(item.id);
                       break; 
@@ -189,7 +188,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
   }, [state.currentUser]); 
 
   const login = async (u: string, p: string): Promise<boolean> => {
-    // Return Promise to allow animation
     return new Promise((resolve) => {
         setTimeout(() => {
             if (u.toLowerCase() === 'admin' && p === '02965740155') {
@@ -205,14 +203,12 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
                 return;
             }
             resolve(false);
-        }, 800); // 800ms delay for "Entrando" animation
+        }, 800);
     });
   };
 
   const logout = () => {
     setState(prev => ({ ...prev, currentUser: null }));
-    // Do not clear sessionTriggeredAlerts on logout to prevent annoying next user on same device, 
-    // or clear it if you want fresh alerts for new user. Let's clear for security/freshness.
     setSessionTriggeredAlerts(new Set());
     localStorage.removeItem('triggeredAlerts'); 
     dismissAlert();
@@ -236,7 +232,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     const targetCte = state.ctes.find(c => c.id === cteId);
     const { cte, serie, codigo } = extractCteInfo(cteId, targetCte);
 
-    // Upload Images
     const uploadPromises = (images || []).map(async (imgBase64) => {
         if (imgBase64.startsWith('http')) return imgBase64;
         try {
@@ -244,7 +239,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
             const mimeType = imgBase64.includes(';') ? imgBase64.split(';')[0].split(':')[1] : 'image/jpeg';
             const response = await postDataToScript('uploadImage', { data: cleanBase64, mimeType: mimeType });
             
-            // Handle various return formats from AppScript
             if (response) {
                 if (response.url) return response.url;
                 if (response.viewUrl) return response.viewUrl;
@@ -270,11 +264,11 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     const dateStr = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
 
     const isCurrentlyEmBusca = targetCte?.status === 'EM BUSCA';
-    const forceProcessControl = isSearch || isCurrentlyEmBusca || customStatus === 'MERCADORIA LOCALIZADA';
+    // Logic to ensure "MERCADORIA LOCALIZADA" goes to process control
+    const forceProcessControl = isSearch || isCurrentlyEmBusca || statusToSend === 'MERCADORIA LOCALIZADA' || statusToSend === 'RESOLVIDO';
 
-    // Optimistic Update
     const newNote: Note = {
-      id: Date.now(), // Temporary ID for UI
+      id: Date.now(), 
       cteId,
       date: dateStr,
       user: state.currentUser.username,
@@ -285,7 +279,7 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
 
     setState(prev => ({ 
         ...prev, 
-        notes: [newNote, ...prev.notes], // Add to TOP
+        notes: [newNote, ...prev.notes],
         ctes: prev.ctes.map(c => c.id === cteId ? { ...c, status: statusToSend || c.status } : c)
     }));
 
@@ -323,17 +317,20 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
      const targetCte = state.ctes.find(c => c.id === cteId);
      const { cte } = extractCteInfo(cteId, targetCte);
 
+     // First, add the closure note to history (this solves the "automatic message" request)
+     await addNote(cteId, "Mercadoria LOCALIZADA. Processo de busca encerrado.", images, false, 'MERCADORIA LOCALIZADA');
+
      setState(prev => ({
          ...prev,
-         ctes: prev.ctes.map(c => c.id === cteId ? { ...c, status: 'PENDENTE' } : c), 
+         ctes: prev.ctes.map(c => c.id === cteId ? { ...c, status: 'MERCADORIA LOCALIZADA' } : c), 
          notes: prev.notes.map(n => n.cteId === cteId ? { ...n, statusBusca: false } : n) 
      }));
 
+     // Tell the sheet to stop the alarm/update status
      const res = await postDataToScript('stopAlarm', { cte: cte });
      return res && res.success;
   };
 
-  // CRUD...
   const createUser = async (user: User) => {
       setState(prev => ({ ...prev, users: [...prev.users, user] }));
       const payload = { ...user, username: user.username, password: user.password, role: user.role, linkedOriginUnit: user.linkedOriginUnit, linkedDestUnit: user.linkedDestUnit, USERNAME: user.username, PASSWORD: user.password, ROLE: user.role, LINKEDORIGINUNIT: user.linkedOriginUnit, LINKEDDESTUNIT: user.linkedDestUnit, sheet: 'USERS' };

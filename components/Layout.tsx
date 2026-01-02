@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
@@ -29,7 +30,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
   const prevNotifCountRef = useRef(0);
 
   // Persistent Read Notifications State
-  // We use state to hold the list, but we load it via useEffect to ensure it updates when user changes (login/logout)
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
 
   // Load read notifications when currentUser changes
@@ -60,12 +60,14 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
 
   if (!currentUser) return <>{children}</>;
 
-  const isAdmin = currentUser.role.toLowerCase() === 'admin';
+  const role = currentUser.role.toLowerCase();
+  const isAdmin = role === 'admin';
+  const isGlobalUser = isAdmin || role === 'leitor' || (!currentUser.linkedOriginUnit && !currentUser.linkedDestUnit);
 
   const alertCte = alertCteId ? ctes.find(c => c.id === alertCteId) : null;
   const selectedCte = selectedCteId ? ctes.find(c => c.id === selectedCteId) : null;
 
-  // Calculate Badges Counts (UPDATED LOGIC: Strict Destination Check & Separation of Critical)
+  // Calculate Badges Counts (UPDATED LOGIC: Global users see all, others see linked units)
   const badgeCounts = useMemo(() => {
     let pendencias = 0;
     let criticos = 0;
@@ -78,10 +80,9 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
        }
 
        // Strict Destination Logic for Badges
-       // Only count for badge if I am Admin OR I am the Destination Unit
        let countsForBadge = false;
 
-       if (isAdmin) {
+       if (isGlobalUser) {
            countsForBadge = true;
        } else {
            // Must be explicitly linked to the destination unit to count in the badge
@@ -91,18 +92,16 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
        }
 
        if (countsForBadge) {
-           // Critical items for this unit
            if (c.computedStatus === 'CRITICO') {
                criticos++;
            } else {
-               // Only count as 'Pendência' if NOT Critical (to avoid duplication)
                pendencias++;
            }
        }
     });
 
     return { pendencias, criticos, emBusca };
-  }, [ctes, currentUser, isAdmin]);
+  }, [ctes, currentUser, isGlobalUser]);
 
   // Close notifications when clicking outside
   useEffect(() => {
@@ -121,10 +120,7 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
     const now = new Date().getTime();
 
     ctes.forEach(c => {
-        // Notification Logic: Show relevant items
-        // We usually show notifications for both Origin and Dest to keep user informed,
-        // even if the Badge count is strict.
-        const isRelevant = isAdmin || 
+        const isRelevant = isGlobalUser || 
                            (currentUser.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) ||
                            (currentUser.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit));
 
@@ -173,9 +169,8 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         const relevantCte = ctes.find(c => c.id === n.cteId);
         let isOriginMsg = false;
         
-        // Only show messages if relevant to user
         if (relevantCte) {
-            const isUserInvolved = isAdmin || 
+            const isUserInvolved = isGlobalUser || 
                 (currentUser.linkedDestUnit && relevantCte.entrega.includes(currentUser.linkedDestUnit)) ||
                 (currentUser.linkedOriginUnit && relevantCte.coleta.includes(currentUser.linkedOriginUnit));
             
@@ -205,7 +200,7 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         }
         return b.sortDate - a.sortDate;
     }).slice(0, 20);
-  }, [ctes, notes, currentUser, isAdmin]);
+  }, [ctes, notes, currentUser, isGlobalUser]);
 
   // Effect to detect NEW notifications
   useEffect(() => {
@@ -244,7 +239,7 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
     { icon: 'ph-package', label: 'Pendências', path: '/pendencias', count: badgeCounts.pendencias, badgeColor: 'bg-indigo-100 text-indigo-700' },
     { icon: 'ph-siren', label: 'Críticos', path: '/criticos', count: badgeCounts.criticos, badgeColor: 'bg-red-100 text-red-600' },
     { icon: 'ph-binoculars', label: 'Em Busca', path: '/em-busca', count: badgeCounts.emBusca, badgeColor: 'bg-yellow-100 text-yellow-700' },
-    ...(currentUser.role.toLowerCase() === 'admin' ? [{ icon: 'ph-sliders', label: 'Configurações', path: '/config', count: 0 }] : []),
+    ...(isAdmin ? [{ icon: 'ph-sliders', label: 'Configurações', path: '/config', count: 0 }] : []),
   ];
 
   return (
@@ -576,7 +571,7 @@ const ChangePasswordModal = ({ onClose, username }: { onClose: () => void, usern
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-scale-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-sm p-6 animate-scale-in">
         <h3 className="text-xl font-bold text-primary mb-4">Alterar Senha</h3>
         <div className="space-y-4">
           <div>
