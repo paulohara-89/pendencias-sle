@@ -170,12 +170,12 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             c.destinatario?.toLowerCase().includes(term)
         );
     } else {
-        // 1. Filtro de Unidade Destino
+        // 1. Filtro de Unidade Destino (Filtro base da Barra)
         if (selectedDestUnit !== 'all') {
             data = data.filter(c => c.entrega === selectedDestUnit);
         }
 
-        // 2. Filtro de Fluxo (Correção da tela em branco)
+        // 2. Filtro de Fluxo (Baseado no vínculo do usuário)
         if (!isGlobalUser && flowFilter !== 'all') {
             const myDest = currentUser?.linkedDestUnit;
             const myOrigin = currentUser?.linkedOriginUnit;
@@ -183,15 +183,15 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             if (flowFilter === 'inbound') {
                 if (myDest) data = data.filter(c => c.entrega === myDest);
             } else if (flowFilter === 'outbound') {
-                // Filtra pela coluna de ORIGEM (COLETA) conforme requisito do Sheets Coluna H
+                // Filtra pela coluna de ORIGEM (COLETA - Coluna H da aba BASE)
                 if (myOrigin) data = data.filter(c => c.coleta.includes(myOrigin));
             }
         }
     }
 
-    // --- SEGREGAÇÃO ABSOLUTA DE STATUS ---
+    // --- SEGREGAÇÃO ABSOLUTA DE STATUS (SOLICITAÇÃO USUÁRIO) ---
     if (mode === 'critical') {
-        // Aba Críticos: EXCLUSIVAMENTE CRITICO (Exclui Em Busca)
+        // Aba Críticos: EXCLUSIVAMENTE CRITICO
         data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
     } else if (mode === 'search') {
         // Aba Em Busca: EXCLUSIVAMENTE EM BUSCA
@@ -228,7 +228,10 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
       <div className="glass-panel p-5 rounded-3xl space-y-4 border border-white/50 shadow-sm">
         <div className="flex flex-col xl:flex-row justify-between items-stretch gap-4">
             <div className="flex flex-col md:flex-row items-stretch gap-3 flex-1">
-                <div className="relative flex-1 md:max-w-md"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Busca Global (Qualquer Unidade)..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" /></div>
+                <div className="relative flex-1 md:max-w-md">
+                    <i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" placeholder="Busca Global (Qualquer Unidade)..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" />
+                </div>
                 
                 <div className="flex gap-2">
                     {isGlobalUser ? (
@@ -277,9 +280,9 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
                 const noteCount = cteNotes.length;
                 
-                // --- LÓGICA DE COR DA NOTIFICAÇÃO ---
-                // Se a última nota foi feita por outra pessoa (interação externa) -> Vermelho
-                // Caso contrário (você foi o último) -> Azul padrão
+                // --- LÓGICA DE COR DA NOTIFICAÇÃO (DINÂMICA) ---
+                // Se a última nota foi feita por outra pessoa -> Vermelho
+                // Se foi por você -> Azul
                 const lastNote = cteNotes[0];
                 const isExternal = lastNote && lastNote.user !== currentUser?.username;
                 const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';
@@ -304,7 +307,11 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <td className="p-5 text-right">
                             <button onClick={() => setSelectedCteId(item.id)} className="relative w-11 h-11 rounded-2xl bg-gray-50 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-100 flex items-center justify-center ml-auto hover:rotate-3">
                                 <i className="ph-bold ph-chat-circle-dots text-lg"></i>
-                                {noteCount > 0 && <span className={`absolute -top-1.5 -right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md animate-pulse ${badgeColorClass}`}>{noteCount}</span>}
+                                {noteCount > 0 && (
+                                  <span className={`absolute -top-1.5 -right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white shadow-md animate-pulse ${badgeColorClass}`}>
+                                    {noteCount}
+                                  </span>
+                                )}
                             </button>
                         </td>
                     </tr>

@@ -140,8 +140,8 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
             const isMe = n.user === currentUser.username;
             const isNoteSearch = n.statusBusca || n.text.toUpperCase().includes('BUSCA') || n.text.toUpperCase().includes('LOCALIZADA');
             
-            // --- COR DINÂMICA NO SINO ---
-            // Vermelho para outros usuários, Azul para você
+            // --- COR DINÂMICA (SINO) ---
+            // Vermelho para interação de terceiros, Azul para interação própria
             const statusColor = isMe ? 'bg-primary' : 'bg-red-600';
 
             list.push({ 
@@ -199,7 +199,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
 
   return (
     <div className="flex h-screen bg-background text-primary overflow-hidden font-sans relative">
-      
       <div className="fixed top-4 right-4 z-[10000] flex flex-col gap-2">
         {toasts.map(toast => (
           <div key={toast.id} className={`min-w-[300px] p-4 rounded-xl shadow-xl flex items-center justify-between animate-slide-in-right bg-white border-l-4 ${toast.type === 'success' ? 'border-green-500 text-green-800' : toast.type === 'error' ? 'border-red-500 text-red-800' : 'border-blue-500 text-blue-800'}`}>
