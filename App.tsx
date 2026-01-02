@@ -1,5 +1,4 @@
-
-import React, { ReactNode, ErrorInfo, Component } from 'react';
+import React, { ReactNode, ErrorInfo } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -20,19 +19,18 @@ interface ErrorBoundaryState {
 
 /**
  * ErrorBoundary: A robust class component to catch JS errors in children.
- * Fixed TypeScript errors (Property 'state'/'props' does not exist) by ensuring explicit typing
- * of the Component class and using standard React Class patterns.
+ * Fixed inheritance and override issues by using React.Component.
  */
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Explicitly declare the state property to satisfy TypeScript property existence checks
-  public override state: ErrorBoundaryState = {
+// Fix: Use React.Component directly to ensure TypeScript correctly identifies the base class and its standard properties like 'props'.
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Removed 'override' modifier from state as the compiler was failing to recognize the inheritance context correctly.
+  public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Explicitly initialize state here as well to ensure constructor initialization logic
     this.state = {
       hasError: false,
       error: null
@@ -48,7 +46,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Correctly accessing state and props from 'this' which are now explicitly recognized
+    // Fix: Correctly accessing state and props from 'this' which are now properly recognized after using React.Component explicitly.
     const { hasError, error } = this.state;
     const { children } = this.props;
 

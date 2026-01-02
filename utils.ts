@@ -16,24 +16,21 @@ export const parseDate = (dateStr: string): Date | null => {
 
 /**
  * Formata links do Drive para visualização direta. 
- * Usa o endpoint de thumbnail como fallback para garantir o carregamento do preview.
+ * Prioriza o endpoint de thumbnail para evitar bloqueios de segurança do Google em tags <img>.
  */
-export const formatImageUrl = (url: string, useThumbnail: boolean = false): string => {
+export const formatImageUrl = (url: string, useThumbnail: boolean = true): string => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
     
-    // Extração de ID
+    // Extração robusta do ID do Google Drive
     let id = '';
-    if (trimmed.includes('id=')) {
-        id = trimmed.split('id=')[1].split('&')[0];
-    } else if (trimmed.includes('/file/d/')) {
-        id = trimmed.split('/file/d/')[1].split('/')[0].split('?')[0];
-    }
-
-    if (id) {
-        // Thumbnail é mais confiável para previews pequenos
+    const idMatch = trimmed.match(/id=([a-zA-Z0-9_-]+)/) || trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    
+    if (idMatch && idMatch[1]) {
+        id = idMatch[1];
+        // Thumbnails são muito mais confiáveis para renderizar em navegadores sem autenticação direta
         if (useThumbnail) {
-            return `https://drive.google.com/thumbnail?id=${id}&sz=w400`;
+            return `https://drive.google.com/thumbnail?id=${id}&sz=w600`;
         }
         return `https://drive.google.com/uc?export=view&id=${id}`;
     }
@@ -44,16 +41,23 @@ export const formatImageUrl = (url: string, useThumbnail: boolean = false): stri
 export const parseDateTime = (dateStr: string): number => {
     if (!dateStr || typeof dateStr !== 'string') return 0;
     try {
+        // Formato esperado: "DD/MM/YYYY HH:mm"
         const parts = dateStr.split(' '); 
         const datePart = parts[0];
-        const timePart = parts[1];
+        const timePart = parts[1] || '00:00';
+        
         const dateParts = datePart.split('/');
+        const timeParts = timePart.split(':');
+        
         if (dateParts.length < 3) return 0;
-        const d = new Date(parseInt(dateParts[2]), parseInt(dateParts[1]) - 1, parseInt(dateParts[0]));
-        if (timePart) {
-            const timeParts = timePart.split(':');
-            d.setHours(parseInt(timeParts[0]) || 0, parseInt(timeParts[1]) || 0, parseInt(timeParts[2]) || 0);
-        }
+        
+        const d = new Date(
+            parseInt(dateParts[2]), 
+            parseInt(dateParts[1]) - 1, 
+            parseInt(dateParts[0]),
+            parseInt(timeParts[0]) || 0,
+            parseInt(timeParts[1]) || 0
+        );
         return d.getTime();
     } catch (e) {
         return 0;
