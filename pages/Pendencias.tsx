@@ -251,17 +251,18 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 // Exceção: Status "EM BUSCA" é global
                 if (c.status === 'EM BUSCA') return true;
 
-                // Se houver seleção manual e o usuário puder mudar (ou for a dele)
+                // Se o usuário está filtrando por SAÍDA, ignoramos o filtro de unidade destino manual (cadeado)
+                // e focamos estritamente na Origem do usuário.
+                if (flowFilter === 'outbound') {
+                    return myOrigin ? c.coleta.toLowerCase().includes(myOrigin) : false;
+                } 
+
+                // Caso contrário (ENTRADA), usamos o destino vinculado ou selecionado
                 if (selectedDestUnit !== 'all') {
                     return c.entrega === selectedDestUnit;
                 }
 
-                // Lógica de fluxo para usuários vinculados
-                if (flowFilter === 'outbound') {
-                    return myOrigin ? c.coleta.toLowerCase().includes(myOrigin) : false;
-                } else {
-                    return myDest ? c.entrega.toLowerCase().includes(myDest) : false;
-                }
+                return myDest ? c.entrega.toLowerCase().includes(myDest) : false;
             });
         } else {
             // Usuário sem trava (Admin/Leitor/Global): segue seleção manual
@@ -381,7 +382,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 <button 
                   onClick={handleExport}
                   title="Exportar Excel"
-                  className="ml-2 p-3 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm active:scale-90"
+                  className="ml-2 h-9 w-10 md:w-12 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm active:scale-90"
                 >
                   <i className="ph-bold ph-file-xls text-xl"></i>
                 </button>

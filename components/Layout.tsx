@@ -301,10 +301,10 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
            
            <div className="flex items-center gap-6">
              <div className="relative cursor-pointer group" ref={notifRef}>
-               <div className={`p-2 rounded-full transition ${unreadCount > 0 ? 'bg-yellow-100/50 text-yellow-600' : isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
+               <div className={`p-2 rounded-full transition ${unreadCount > 0 ? 'bg-yellow-400 text-white shadow-lg' : isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
                  <i className={`text-2xl ${unreadCount > 0 || isNotifOpen ? 'ph-fill ph-bell' : 'ph-light ph-bell'}`}></i>
                  {unreadCount > 0 && (
-                   <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-600 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-md animate-bounce px-1">
+                   <span className="absolute -top-1.5 -right-1.5 min-w-[24px] h-6 bg-red-600 text-white text-[11px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-xl animate-bounce px-1.5">
                      {unreadCount}
                    </span>
                  )}
