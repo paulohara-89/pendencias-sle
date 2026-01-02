@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 export const generateInsights = async (kpiData: any) => {
@@ -15,8 +16,9 @@ export const generateInsights = async (kpiData: any) => {
       Não use formatação markdown complexa, apenas texto corrido.
     `;
 
+    // Using gemini-3-pro-preview for advanced reasoning tasks like business logistics analysis as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
     });
 

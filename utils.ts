@@ -16,18 +16,33 @@ export const parseDate = (dateStr: string): Date | null => {
   return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
 };
 
-// Transform Google Drive links to direct view links for <img> tags
+/**
+ * Transforma links do Google Drive em links diretos de visualização para tags <img>.
+ * Suporta links de compartilhamento (/file/d/...) e links diretos (id=...).
+ */
 export const formatImageUrl = (url: string): string => {
-    if (!url) return '';
+    if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
     
-    // If it's a standard Google Drive sharing link
-    if (trimmed.includes('drive.google.com') && (trimmed.includes('/file/d/') || trimmed.includes('id='))) {
+    // Se já for um link de visualização direta, apenas garante que está no formato correto
+    if (trimmed.includes('drive.google.com') && trimmed.includes('export=view')) {
+        return trimmed;
+    }
+
+    // Se for um link de download direto, muda para visualização
+    if (trimmed.includes('drive.google.com') && trimmed.includes('export=download')) {
+        return trimmed.replace('export=download', 'export=view');
+    }
+
+    // Extração de ID para links de compartilhamento padrão
+    if (trimmed.includes('drive.google.com')) {
         let id = '';
         if (trimmed.includes('/file/d/')) {
-            id = trimmed.split('/file/d/')[1].split('/')[0].split('?')[0];
+            const parts = trimmed.split('/file/d/');
+            if (parts[1]) id = parts[1].split('/')[0].split('?')[0];
         } else if (trimmed.includes('id=')) {
-            id = trimmed.split('id=')[1].split('&')[0];
+            const parts = trimmed.split('id=');
+            if (parts[1]) id = parts[1].split('&')[0];
         }
         
         if (id) {
@@ -42,19 +57,17 @@ export const formatImageUrl = (url: string): string => {
 export const parseDateTime = (dateStr: string): number => {
     if (!dateStr || typeof dateStr !== 'string') return 0;
     try {
-        const parts = dateStr.split(' '); // Split date and time
+        const parts = dateStr.split(' '); 
         const datePart = parts[0];
         const timePart = parts[1];
 
         const dateParts = datePart.split('/');
         if (dateParts.length < 3) return 0;
         
-        // Setup Date
         const day = parseInt(dateParts[0]);
         const month = parseInt(dateParts[1]) - 1;
         const year = parseInt(dateParts[2]);
 
-        // Setup Time (default to 00:00 if missing)
         let hour = 0;
         let minute = 0;
         let second = 0;
@@ -73,12 +86,11 @@ export const parseDateTime = (dateStr: string): number => {
     }
 };
 
-// Helper to calculate difference in BUSINESS days from a reference date (Skipping Holidays)
+// Helper to calculate difference in BUSINESS days
 export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], referenceDate?: Date | string): number | null => {
   const target = parseDate(dateStr);
   if (!target) return null;
   
-  // Use referenceDate (system clock) if provided, otherwise fallback to local Date
   let today: Date;
   if (referenceDate) {
     if (typeof referenceDate === 'string') {
@@ -93,7 +105,6 @@ export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], r
   today.setHours(0,0,0,0);
   target.setHours(0,0,0,0);
   
-  // Parse holidays to timestamps
   const holidayTimestamps = new Set(
     holidays.map(h => {
         const d = parseDate(h);
@@ -112,12 +123,10 @@ export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], r
   const loopStart = new Date(isFuture ? start : end);
   const loopEnd = new Date(isFuture ? end : start);
   
-  // Move loopStart one day forward to start counting difference
   loopStart.setDate(loopStart.getDate() + 1);
 
   while (loopStart <= loopEnd) {
       const stamp = loopStart.getTime();
-      // If it is NOT a holiday, we count it.
       if (!holidayTimestamps.has(stamp)) {
           count++;
       }
@@ -127,25 +136,11 @@ export const calculateBusinessDaysDiff = (dateStr: string, holidays: string[], r
   return isFuture ? count : -count;
 };
 
-export const getDaysDifference = (dateStr: string): number | null => {
-  const target = parseDate(dateStr);
-  if (!target) return null;
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  target.setHours(0,0,0,0);
-  const diffTime = target.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-};
-
-export const formatDate = (date: Date): string => {
-  return new Intl.DateTimeFormat('pt-BR').format(date);
-};
-
 export const getStatusColor = (status: string) => {
   switch (status) {
     case 'CRITICO': return 'bg-red-700 text-white border border-red-900';
     case 'FORA_DO_PRAZO': return 'bg-red-500 text-white border border-red-600';
-    case 'PRIORIDADE': return 'bg-orange-500 text-white border border-orange-600'; // Same day
+    case 'PRIORIDADE': return 'bg-orange-500 text-white border border-orange-600';
     case 'VENCE_AMANHA': return 'bg-yellow-400 text-yellow-900 border border-yellow-500';
     case 'NO_PRAZO': return 'bg-cyan-500 text-white border border-cyan-600';
     default: return 'bg-gray-200 text-gray-700';
@@ -197,11 +192,9 @@ export const calculateStatus = (cte: CTE, config: { today: Date, limitDays: numb
   const limit = new Date(limitDate);
   limit.setHours(0,0,0,0);
 
-  // Critical Logic Check
   const criticalThresholdDate = addBusinessDays(limit, config.limitDays, config.holidays);
   criticalThresholdDate.setHours(0,0,0,0);
 
-  // Centralized Diff Calculation
   const daysDiff = calculateBusinessDaysDiff(cte.dataLimite, config.holidays, config.today);
 
   if (today.getTime() > criticalThresholdDate.getTime()) return 'CRITICO';

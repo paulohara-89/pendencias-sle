@@ -116,7 +116,47 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     {cteNotes.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60"><i className="ph-duotone ph-chats text-4xl mb-2"></i><p>Nenhuma nota registrada.</p></div>) : (
                         cteNotes.map(note => {
                             const isMe = currentUser?.username === note.user;
-                            return (<div key={note.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-4 shadow-sm ${isMe ? 'bg-indigo-50 text-gray-800 rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}><div className="flex justify-between items-center gap-4 mb-1"><span className={`text-xs font-bold ${isMe ? 'text-indigo-600' : 'text-primary'}`}>{note.user}</span><span className="text-[10px] text-gray-400">{note.date}</span></div><p className="text-sm whitespace-pre-wrap leading-relaxed">{note.text}</p>{note.imageUrl && (<div className="mt-3 flex gap-2 flex-wrap">{note.imageUrl.split(',').map(url => url.trim()).filter(url => url.length > 0).map((url, i) => (<a key={i} href={formatImageUrl(url)} target="_blank" rel="noopener noreferrer"><img src={formatImageUrl(url)} alt="anexo" className="w-24 h-24 rounded-lg border border-gray-200 object-cover hover:opacity-90 transition bg-white" onError={(e) => {(e.target as HTMLImageElement).src = "https://placehold.co/100x100?text=Erro";}}/></a>))}</div>)}</div></div>);
+                            return (
+                              <div key={note.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-4 shadow-sm ${isMe ? 'bg-indigo-50 text-gray-800 rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}`}>
+                                  <div className="flex justify-between items-center gap-4 mb-1">
+                                    <span className={`text-xs font-bold ${isMe ? 'text-indigo-600' : 'text-primary'}`}>{note.user}</span>
+                                    <span className="text-[10px] text-gray-400">{note.date}</span>
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{note.text}</p>
+                                  {note.imageUrl && (
+                                    <div className="mt-3 flex gap-2 flex-wrap">
+                                      {note.imageUrl.split(',')
+                                        .map(url => url.trim())
+                                        .filter(url => url.length > 0)
+                                        .map((url, i) => {
+                                          const directUrl = formatImageUrl(url);
+                                          return (
+                                            <div key={i} className="flex flex-col gap-1 items-center">
+                                              <a href={directUrl} target="_blank" rel="noopener noreferrer" className="block group">
+                                                <img 
+                                                  src={directUrl} 
+                                                  alt="anexo" 
+                                                  loading="lazy"
+                                                  className="w-24 h-24 rounded-lg border border-gray-200 object-cover hover:ring-2 hover:ring-primary transition bg-gray-100" 
+                                                  onError={(e) => {
+                                                    // Se falhar, mostra o placeholder de erro
+                                                    (e.target as HTMLImageElement).src = "https://placehold.co/100x100?text=Abrir+Link";
+                                                  }}
+                                                />
+                                              </a>
+                                              <a href={directUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-primary font-bold">
+                                                ABRIR ORIGINAL
+                                              </a>
+                                            </div>
+                                          );
+                                        })
+                                      }
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
                         })
                     )}
                 </div>

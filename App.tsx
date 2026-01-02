@@ -1,5 +1,5 @@
 
-import React, { ReactNode, ErrorInfo } from 'react';
+import React, { ReactNode, ErrorInfo, Component } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -18,16 +18,14 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// ErrorBoundary: Fixed TypeScript "Property does not exist" errors by using React.Component and explicitly declaring the state property.
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly initialize state at the class level to assist TypeScript in resolving property access on 'this'.
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
-
+// ErrorBoundary: Fixed TypeScript "Property does not exist" errors by explicitly using Component and ensuring correct inheritance through constructor initialization.
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -39,7 +37,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
-    // Accessing state and props from 'this' which are now correctly inherited from React.Component.
+    // Correctly accessing state and props from 'this' which are inherited from Component.
     const { hasError, error } = this.state;
     const { children } = this.props;
 
