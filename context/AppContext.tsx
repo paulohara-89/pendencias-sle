@@ -100,12 +100,10 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
       
       const processedCTEs = data.ctes.map(c => {
         const cteNotes = data.notes.filter(n => n.cteId === c.id);
-        // Sort newest first
         cteNotes.sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
         
         let finalStatus = c.status;
 
-        // Optimized Resolution Logic: Find the LATEST note that changes "EM BUSCA" state
         const lastDefiningNote = cteNotes.find(n => 
           n.statusBusca === true || 
           n.text.toUpperCase().includes('LOCALIZADA') || 
@@ -147,19 +145,16 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
         loading: false
       }));
 
-      // --- LOGICA DE ALERTA "EM BUSCA" ---
       if (state.currentUser) {
           const emBuscaItems = processedCTEs.filter(c => c.status === 'EM BUSCA');
           
           for (const item of emBuscaItems) {
-              // Verifica se já existe ALGUMA tratativa humana (ignorando a mensagem automática de marcação)
               const followupNotes = data.notes.filter(n => 
                 n.cteId === item.id && 
                 !n.text.includes("marcada como: EM BUSCA") &&
                 !n.text.includes("INICIADO VIA OBS")
               );
               
-              // Só dispara o alerta se NÃO houver tratativa de nenhum usuário
               if (followupNotes.length === 0) {
                   if (!alertActive && !sessionTriggeredAlerts.has(item.id)) {
                       triggerAlert(item.id);
@@ -171,7 +166,7 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
 
     } catch (err) {
       console.error(err);
-      setState(prev => ({ ...prev, loading: false, error: 'Falha ao carregar dados. Verifique a conexão.' }));
+      setState(prev => ({ ...prev, loading: false, error: 'Falha ao carregar dados.' }));
     }
   };
 
@@ -236,7 +231,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
   const addNote = async (cteId: string, text: string, images: string[] = [], isSearch: boolean = false, customStatus?: string): Promise<boolean> => {
     if (!state.currentUser) return false;
 
-    // Se houver um alerta ativo para este CTE, fechamos o alerta imediatamente ao enviar a nota
     if (alertActive && alertCteId === cteId) {
         dismissAlert();
     }
@@ -251,12 +245,7 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
             const mimeType = imgBase64.includes(';') ? imgBase64.split(';')[0].split(':')[1] : 'image/jpeg';
             const response = await postDataToScript('uploadImage', { data: cleanBase64, mimeType: mimeType });
             
-            if (response) {
-                if (response.url) return response.url;
-                if (response.viewUrl) return response.viewUrl;
-                if (response.data && response.data.url) return response.data.url;
-                if (response.data && response.data.viewUrl) return response.data.viewUrl;
-            }
+            if (response && response.url) return response.url;
             return null;
         } catch (e) { return null; }
     });
@@ -278,8 +267,11 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     const isCurrentlyEmBusca = targetCte?.status === 'EM BUSCA';
     const forceProcessControl = isSearch || isCurrentlyEmBusca || statusToSend === 'MERCADORIA LOCALIZADA' || statusToSend === 'RESOLVIDO';
 
+    // Geramos um ID único aqui para garantir que ambas as abas usem a mesma referência
+    const uniqueNoteId = `TX-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
     const newNote: Note = {
-      id: Date.now(), 
+      id: uniqueNoteId, 
       cteId,
       date: dateStr,
       user: state.currentUser.username,
@@ -290,26 +282,22 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
 
     setState(prev => ({ 
         ...prev, 
-        notes: [newNote, ...prev.notes],
+        // Desduplicação local preventiva
+        notes: [newNote, ...prev.notes.filter(n => n.id !== uniqueNoteId)],
         ctes: prev.ctes.map(c => c.id === cteId ? { ...c, status: statusToSend || c.status } : c)
     }));
 
     const payload = {
+        id: uniqueNoteId, // Enviamos o ID para a planilha gravar
+        ID: uniqueNoteId,
         cte: cte, 
         serie: serie,
         codigo: codigo,
         CODIGO: codigo,
-        cteNumber: cte,
         user: state.currentUser.username,
         text: text,
-        image: finalImageUrl, 
         imageUrl: finalImageUrl,
-        link: finalImageUrl,
-        url: finalImageUrl,
         link_imagem: finalImageUrl, 
-        LINK_IMAGEM: finalImageUrl,
-        linkImagem: finalImageUrl,
-        LinkImagem: finalImageUrl,
         markInSearch: forceProcessControl,
         sheet: forceProcessControl ? 'PROCESS_CONTROL' : 'NOTES',
         status: statusToSend,
@@ -342,7 +330,7 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
 
   const createUser = async (user: User) => {
       setState(prev => ({ ...prev, users: [...prev.users, user] }));
-      const payload = { ...user, username: user.username, password: user.password, role: user.role, linkedOriginUnit: user.linkedOriginUnit, linkedDestUnit: user.linkedDestUnit, USERNAME: user.username, PASSWORD: user.password, ROLE: user.role, LINKEDORIGINUNIT: user.linkedOriginUnit, LINKEDDESTUNIT: user.linkedDestUnit, sheet: 'USERS' };
+      const payload = { ...user, username: user.username, password: user.password, role: user.role, linkedOriginUnit: user.linkedOriginUnit, linkedDestUnit: user.linkedDestUnit, sheet: 'USERS' };
       const res = await postDataToScript('createUser', payload);
       return res && res.success;
   };
@@ -362,21 +350,21 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
 
   const createProfile = async (profile: Profile) => {
       setState(prev => ({ ...prev, profiles: [...prev.profiles, profile] }));
-      const payload = { ...profile, NAME: profile.name, DESCRIPTION: profile.description, PERMISSIONS: profile.permissions, ProfileName: profile.name, Description: profile.description, Permissions: profile.permissions, sheet: 'PROFILES' };
+      const payload = { ...profile, sheet: 'PROFILES' };
       const res = await postDataToScript('createProfile', payload);
       return res && res.success;
   };
 
   const updateProfile = async (oldName: string, profile: Profile) => {
       setState(prev => ({ ...prev, profiles: prev.profiles.map(p => p.name === oldName ? profile : p) }));
-      const payload = { oldName, ...profile, NAME: profile.name, DESCRIPTION: profile.description, PERMISSIONS: profile.permissions, ProfileName: profile.name, Description: profile.description, Permissions: profile.permissions, sheet: 'PROFILES' };
+      const payload = { oldName, ...profile, sheet: 'PROFILES' };
       const res = await postDataToScript('updateProfile', payload);
       return res && res.success;
   };
 
   const deleteProfile = async (name: string) => {
       setState(prev => ({ ...prev, profiles: prev.profiles.filter(p => p.name !== name) }));
-      const res = await postDataToScript('deleteProfile', { name, NAME: name, sheet: 'PROFILES' });
+      const res = await postDataToScript('deleteProfile', { name, sheet: 'PROFILES' });
       return res && res.success;
   };
 

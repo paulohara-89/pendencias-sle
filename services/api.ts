@@ -61,19 +61,23 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
     })).filter(p => p.name);
 
     const baseTimestamp = Date.now();
-    const processNoteRow = (row: any, index: number, sourcePrefix: string): Note | null => {
+    const processNoteRow = (row: any, index: number): Note | null => {
       const serie = row['SERIE'] || row['serie'] || row['Serie'] || '';
       const cte = row['CTE'] || row['cte'] || row['Cte'] || '';
       const user = row['USER'] || row['USUARIO'] || row['user'] || row['usuario'] || 'Sistema';
       const text = row['DESCRIPTION'] || row['TEXTO'] || row['description'] || row['texto'] || '';
       const statusStr = row['STATUS'] || row['status'];
       const statusBuscaFlag = row['STATUS_BUSCA'] || row['status_busca'];
+      const rowId = row['ID'] || row['id'];
       
       if (!serie && !cte) return null;
 
+      const cteId = generateId(serie, cte);
+
       return {
-        id: row['ID'] || `${sourcePrefix}-${baseTimestamp}-${index}`,
-        cteId: generateId(serie, cte), 
+        // Crucial: Não adicionamos prefixo. Se o ID for igual em ambas as abas, o Map unificará.
+        id: rowId || `TEMP-${baseTimestamp}-${index}`,
+        cteId: cteId, 
         date: row['DATA'] || row['data'],
         user: user, 
         text: text, 
@@ -82,17 +86,23 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
       };
     };
 
-    const notesFromProcess = processControlData.map((row, i) => processNoteRow(row, i, 'PC')).filter((n): n is Note => n !== null);
-    const notesFromTab = notesTabData.map((row, i) => processNoteRow(row, i, 'NT')).filter((n): n is Note => n !== null);
+    const notesFromProcess = processControlData.map((row, i) => processNoteRow(row, i)).filter((n): n is Note => n !== null);
+    const notesFromTab = notesTabData.map((row, i) => processNoteRow(row, 10000 + i)).filter((n): n is Note => n !== null);
     const allNotes = [...notesFromProcess, ...notesFromTab];
     
     const uniqueNotesMap = new Map();
     allNotes.forEach(note => {
-        const contentHash = `${note.user}-${note.text}-${note.date}`;
-        const key = (note.id && String(note.id).length > 5) ? `${note.id}-${contentHash}` : contentHash;
-        if (!uniqueNotesMap.has(key)) uniqueNotesMap.set(key, note);
+        // Se houver um ID real na planilha, usamos ele como chave primária
+        // Caso contrário, criamos um hash de conteúdo para evitar duplicatas visuais
+        const isTempId = String(note.id).startsWith('TEMP-');
+        const contentHash = `${note.cteId}-${note.user}-${note.text.trim()}`;
+        const key = isTempId ? contentHash : String(note.id);
+        
+        if (!uniqueNotesMap.has(key)) {
+            uniqueNotesMap.set(key, note);
+        }
     });
-    const notes = Array.from(uniqueNotesMap.values());
+    const notes = Array.from(uniqueNotesMap.values()) as Note[];
 
     const todayStr = (configRaw[0] && configRaw[0][1]) || new Date().toLocaleDateString('pt-BR');
     const tomorrowStr = (configRaw[1] && configRaw[1][1]) || '';
@@ -123,7 +133,7 @@ const fetchCsv = async (url: string, hasHeader: boolean = true): Promise<any[]> 
     const response = await fetch(url);
     if (!response.ok) {
         if (response.status === 404) throw new Error("Aba da planilha não encontrada.");
-        if (response.status === 403) throw new Error("Sem permissão para acessar a planilha. Certifique-se de que ela está 'disponível para qualquer pessoa com o link'.");
+        if (response.status === 403) throw new Error("Sem permissão para acessar a planilha.");
         throw new Error(`Erro HTTP: ${response.status}`);
     }
     const csvText = await response.text();
@@ -132,7 +142,7 @@ const fetchCsv = async (url: string, hasHeader: boolean = true): Promise<any[]> 
             header: hasHeader,
             skipEmptyLines: true,
             complete: (results) => resolve(results.data as any[]),
-            error: (err: any) => reject(new Error("Falha ao processar o formato CSV da planilha."))
+            error: (err: any) => reject(new Error("Falha ao processar o formato CSV."))
         });
     });
   } catch (e) {
