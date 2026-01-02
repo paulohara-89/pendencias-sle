@@ -100,7 +100,15 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
             </div>
             <div className="md:hidden p-4 border-b border-gray-100 bg-gray-50 pt-12">
                  <h2 className="text-xl font-bold text-gray-800">{cte.cte}</h2><p className="text-sm text-gray-500">Série {cte.serie}</p>
-                 <div className="mt-3 flex gap-2">{cte.status === 'EM BUSCA' ? (<button onClick={handleResolve} className="flex-1 text-xs bg-green-600 text-white px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-check"></i> Resolver</button>) : isResolved ? (<span className="flex-1 text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1">Localizada</span>) : (<button onClick={handleMarkSearch} className="flex-1 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-binoculars"></i> Marcar</button>))}</div>
+                 <div className="mt-3 flex gap-2">
+                    {cte.status === 'EM BUSCA' ? (
+                      <button onClick={handleResolve} className="flex-1 text-xs bg-green-600 text-white px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-check"></i> Resolver</button>
+                    ) : isResolved ? (
+                      <span className="flex-1 text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1">Localizada</span>
+                    ) : (
+                      <button onClick={handleMarkSearch} className="flex-1 text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1"><i className="ph-bold ph-binoculars"></i> Marcar</button>
+                    )}
+                 </div>
             </div>
             <div className="flex-1 flex flex-col bg-white">
                 <div className="p-4 border-b border-gray-100 bg-white z-10 hidden md:block pt-6"><h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph-fill ph-chat-circle-text text-primary"></i> Histórico de Tratativas</h3></div>
