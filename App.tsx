@@ -1,5 +1,4 @@
-
-import React, { ReactNode, ErrorInfo } from 'react';
+import React, { ReactNode, ErrorInfo, Component } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -21,27 +20,29 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary: A robust class component to catch JS errors in children.
  */
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Fix: Explicitly defining state and using standard React.Component structure to ensure props and state are correctly typed.
+// Use Component directly to improve type inference for this.state and this.props
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declare state property to ensure TypeScript recognizes it on the class instance
+  state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  // Fix: Corrected lifecycle method and ensured it handles errors properly.
+  // ComponentDidCatch properly logs errors caught by the boundary
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 
   render() {
-    // Fix: Using this.state and this.props directly to resolve inference issues in certain TS environments.
+    // Explicitly using this.state and this.props which are now properly typed
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">

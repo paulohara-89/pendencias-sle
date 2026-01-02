@@ -135,18 +135,10 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const { ctes, notes, currentUser, setSelectedCteId } = useApp();
   const [filterText, setFilterText] = useState('');
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
-  const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
+  const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('inbound'); // Prioriza Chegada
   const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
   const [noteFilter, setNoteFilter] = useState<'all' | 'with' | 'without'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'dataLimite', direction: 'asc' });
-
-  // Handle sorting for the pendencies list
-  const handleSort = (key: SortKey) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }));
-  };
 
   const role = currentUser?.role.toLowerCase();
   const isAdmin = role === 'admin';
@@ -162,40 +154,64 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
     setPaymentFilters(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
   };
 
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
+  };
+
   const filteredData = useMemo(() => {
     let data = ctes;
     
-    // 1. Filtro de Texto
+    // --- BUSCA GLOBAL (Prioridade Máxima) ---
+    // Se houver texto de busca, ignora todos os outros filtros (exceto modo)
     if (filterText) {
         const term = filterText.toLowerCase();
-        data = data.filter(c => c.cte.includes(term) || c.serie.includes(term) || c.destinatario?.toLowerCase().includes(term));
+        data = data.filter(c => 
+            c.cte.includes(term) || 
+            c.serie.includes(term) || 
+            c.destinatario?.toLowerCase().includes(term) ||
+            c.id.toLowerCase().includes(term)
+        );
+    } else {
+        // 1. Filtro de Escopo de Unidade (Apenas se não for busca global)
+        if (!isGlobalUser) {
+            data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
+        }
+
+        // 2. Filtro de Unidade Destino (Dropdown)
+        if (selectedDestUnit !== 'all') {
+            data = data.filter(c => c.entrega === selectedDestUnit);
+        }
+
+        // 3. Filtro de Fluxo (Chegada / Saída)
+        // Correção da lógica para não zerar a lista
+        if (flowFilter !== 'all') {
+            const myUnit = currentUser?.linkedDestUnit || currentUser?.linkedOriginUnit;
+            if (myUnit) {
+                if (flowFilter === 'inbound') data = data.filter(c => c.entrega.includes(myUnit));
+                else data = data.filter(c => c.coleta.includes(myUnit));
+            }
+        }
     }
 
-    // 2. Filtro de Escopo de Unidade
-    if (!isGlobalUser && !filterText) {
-        data = data.filter(c => (currentUser?.linkedOriginUnit && c.coleta.includes(currentUser.linkedOriginUnit)) || (currentUser?.linkedDestUnit && c.entrega.includes(currentUser.linkedDestUnit)) || c.status === 'EM BUSCA');
+    // --- SEGREGAÇÃO DE STATUS (Sempre aplicado) ---
+    if (mode === 'critical') {
+        // Apenas itens Críticos ou em Busca
+        data = data.filter(c => c.computedStatus === 'CRITICO' || c.status === 'EM BUSCA');
+    } else if (mode === 'search') {
+        // Apenas em busca
+        data = data.filter(c => c.status === 'EM BUSCA');
+    } else {
+        // Aba Pendências: FORA_DO_PRAZO, PRIORIDADE, VENCE_AMANHA, NO_PRAZO. 
+        // EXCLUI Críticos e Em Busca.
+        data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
     }
 
-    // 3. Filtros de Modo (Críticos / Busca)
-    if (mode === 'critical') data = data.filter(c => c.computedStatus === 'CRITICO' || c.status === 'EM BUSCA');
-    else if (mode === 'search') data = data.filter(c => c.status === 'EM BUSCA');
-    else data = data.filter(c => c.status !== 'EM BUSCA');
-
-    // 4. Filtro de Unidade Destino (Dropdown)
-    if (selectedDestUnit !== 'all') data = data.filter(c => c.entrega === selectedDestUnit);
-
-    // 5. Filtro de Fluxo (Chegada / Saída)
-    if (flowFilter !== 'all' && currentUser?.linkedDestUnit) {
-        if (flowFilter === 'inbound') data = data.filter(c => c.entrega === currentUser.linkedDestUnit);
-        else data = data.filter(c => c.coleta === currentUser.linkedDestUnit);
-    }
-
-    // 6. Filtro de Pagamento (CIF, FOB, etc)
+    // 4. Filtro de Pagamento
     if (paymentFilters.length > 0) {
         data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
     }
 
-    // 7. Filtro de Notas (Com/Sem)
+    // 5. Filtro de Notas
     if (noteFilter !== 'all') {
         data = data.filter(c => {
             const hasNotes = notes.some(n => n.cteId === c.id);
@@ -216,25 +232,29 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
       <div className="glass-panel p-5 rounded-3xl space-y-4 border border-white/50 shadow-sm">
         <div className="flex flex-col xl:flex-row justify-between items-stretch gap-4">
             <div className="flex flex-col md:flex-row items-stretch gap-3 flex-1">
-                <div className="relative flex-1 md:max-w-md"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Filtre por CTE ou Cliente..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" /></div>
+                <div className="relative flex-1 md:max-w-md"><i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i><input type="text" placeholder="Busca Global (Qualquer Unidade)..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" /></div>
                 
-                {isGlobalUser ? (
-                    <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}>
-                        <option value="all">TODAS AS UNIDADES</option>
-                        {destinationUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                    </select>
-                ) : (
-                    <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={flowFilter} onChange={(e) => setFlowFilter(e.target.value as any)}>
-                        <option value="all">FLUXO: TODOS</option>
-                        <option value="inbound">CHEGADA (DESTINO)</option>
-                        <option value="outbound">SAÍDA (ORIGEM)</option>
-                    </select>
-                )}
+                <div className="flex gap-2">
+                    {isGlobalUser ? (
+                        <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}>
+                            <option value="all">TODAS AS UNIDADES</option>
+                            {destinationUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                        </select>
+                    ) : (
+                        <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={flowFilter} onChange={(e) => setFlowFilter(e.target.value as any)}>
+                            <option value="all">FLUXO: TODOS</option>
+                            <option value="inbound">CHEGADA (DESTINO)</option>
+                            <option value="outbound">SAÍDA (ORIGEM)</option>
+                        </select>
+                    )}
+                </div>
             </div>
             
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                {['CIF', 'FOB', 'REMETENTE', 'DEST'].map(type => (
-                    <button key={type} onClick={() => togglePaymentFilter(type)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${paymentFilters.includes(type) ? 'bg-primary text-white border-primary shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>{type}</button>
+                {['CIF', 'FOB', 'FATURAR_REMETENTE', 'FATURAR_DEST'].map(type => (
+                    <button key={type} onClick={() => togglePaymentFilter(type)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${paymentFilters.includes(type) ? 'bg-primary text-white border-primary shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>
+                        {type.replace(/_/g, ' ')}
+                    </button>
                 ))}
                 <div className="w-px h-6 bg-gray-200 mx-1"></div>
                 <button onClick={() => setNoteFilter(noteFilter === 'with' ? 'without' : noteFilter === 'without' ? 'all' : 'with')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${noteFilter !== 'all' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-100'}`}>
@@ -267,7 +287,12 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <td className="p-5">
                             <div className="flex flex-col gap-1.5 items-start">
                                 <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
-                                <span className={`px-2.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
+                                <button 
+                                  onClick={() => togglePaymentFilter(item.fretePago)}
+                                  className={`px-2.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest transition-transform hover:scale-105 active:scale-95 ${getPaymentColor(item.fretePago)}`}
+                                >
+                                  {item.fretePago}
+                                </button>
                             </div>
                         </td>
                         <td className="p-5 text-[10px] font-bold text-gray-500"><div className="flex items-center gap-1.5"><span className="truncate max-w-[100px]">{item.coleta}</span><i className="ph-bold ph-arrow-right text-indigo-300"></i><span className="truncate max-w-[100px] text-gray-700">{item.entrega}</span></div></td>
