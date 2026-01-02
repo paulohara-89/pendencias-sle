@@ -7,9 +7,10 @@ export const parseCurrency = (value: string): number => {
   return parseFloat(value.replace(/\./g, '').replace(',', '.'));
 };
 
-export const parseDate = (dateStr: string): Date | null => {
+export const parseDate = (dateStr: string | any): Date | null => {
   if (!dateStr) return null;
-  const parts = dateStr.split('/');
+  const str = String(dateStr).trim();
+  const parts = str.split('/');
   if (parts.length !== 3) return null;
   return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
 };
@@ -40,45 +41,43 @@ export const parseDateTime = (dateStr: string): number => {
 };
 
 /**
- * Calcula a diferença em dias úteis entre duas datas.
- * Ignora finais de semana e a lista de feriados fornecida.
+ * Calcula a diferença em dias úteis entre a data de referência (hoje da planilha) 
+ * e a data alvo (data limite).
+ * Ignora Finais de Semana (Sáb/Dom) e Feriados da Coluna D.
  */
 export const calculateBusinessDaysDiff = (targetDateStr: string, holidays: string[], referenceDate: Date): number | null => {
   const target = parseDate(targetDateStr);
   if (!target) return null;
 
-  const today = new Date(referenceDate);
-  today.setHours(0, 0, 0, 0);
+  const ref = new Date(referenceDate);
+  ref.setHours(0, 0, 0, 0);
   target.setHours(0, 0, 0, 0);
 
   const holidayTimestamps = new Set(
     holidays
       .map(h => parseDate(h))
       .filter(d => d !== null)
-      .map(d => d!.setHours(0, 0, 0, 0))
+      .map(d => d!.getTime())
   );
 
-  const isFuture = target.getTime() >= today.getTime();
+  const isFuture = target.getTime() >= ref.getTime();
   let count = 0;
   
-  const start = new Date(isFuture ? today : target);
-  const end = new Date(isFuture ? target : today);
+  const start = new Date(isFuture ? ref : target);
+  const end = new Date(isFuture ? target : ref);
 
-  // Percorre as datas entre start e end (exclusive a data de início se for hoje)
   let current = new Date(start);
-  if (current.getTime() !== end.getTime()) {
+  
+  // Não contamos o dia de início na diferença absoluta de dias passados/restantes
+  while (current.getTime() !== end.getTime()) {
       current.setDate(current.getDate() + 1);
-  }
-
-  while (current <= end) {
       const dayOfWeek = current.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 0=Dom, 6=Sab
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const isHoliday = holidayTimestamps.has(current.getTime());
 
       if (!isWeekend && !isHoliday) {
           count++;
       }
-      current.setDate(current.getDate() + 1);
   }
 
   return isFuture ? count : -count;
@@ -86,7 +85,7 @@ export const calculateBusinessDaysDiff = (targetDateStr: string, holidays: strin
 
 export const getStatusColor = (status: string) => {
   switch (status) {
-    case 'CRITICO': return 'bg-red-700 text-white border border-red-900';
+    case 'CRITICO': return 'bg-red-700 text-white border border-red-900 shadow-sm';
     case 'FORA_DO_PRAZO': return 'bg-red-500 text-white border border-red-600';
     case 'PRIORIDADE': return 'bg-orange-500 text-white border border-orange-600';
     case 'VENCE_AMANHA': return 'bg-yellow-400 text-yellow-900 border border-yellow-500';
@@ -110,9 +109,8 @@ export const calculateStatus = (cte: CTE, config: { today: Date, limitDays: numb
   
   if (daysDiff === null) return 'NO_PRAZO';
 
-  // Se a diferença for negativa, já passou do prazo
   if (daysDiff < 0) {
-      // Se estourou o prazo limite (ex: 10 dias) configurado na aba DATA, vira CRITICO
+      // Se a diferença negativa (dias passados) for maior ou igual ao limite (ex: 10)
       if (Math.abs(daysDiff) >= config.limitDays) return 'CRITICO';
       return 'FORA_DO_PRAZO';
   }

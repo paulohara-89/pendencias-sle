@@ -170,12 +170,12 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             c.destinatario?.toLowerCase().includes(term)
         );
     } else {
-        // 1. Filtro de Unidade Destino (Filtro base da Barra)
+        // 1. Filtro de Unidade Destino (Barra)
         if (selectedDestUnit !== 'all') {
             data = data.filter(c => c.entrega === selectedDestUnit);
         }
 
-        // 2. Filtro de Fluxo (Baseado no vínculo do usuário)
+        // 2. Filtro de Fluxo (Correção da Saída)
         if (!isGlobalUser && flowFilter !== 'all') {
             const myDest = currentUser?.linkedDestUnit;
             const myOrigin = currentUser?.linkedOriginUnit;
@@ -184,12 +184,15 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 if (myDest) data = data.filter(c => c.entrega === myDest);
             } else if (flowFilter === 'outbound') {
                 // Filtra pela coluna de ORIGEM (COLETA - Coluna H da aba BASE)
-                if (myOrigin) data = data.filter(c => c.coleta.includes(myOrigin));
+                // Usamos includes e toLowerCase para ser robusto
+                if (myOrigin) {
+                    data = data.filter(c => c.coleta.toLowerCase().includes(myOrigin.toLowerCase()));
+                }
             }
         }
     }
 
-    // --- SEGREGAÇÃO ABSOLUTA DE STATUS (SOLICITAÇÃO USUÁRIO) ---
+    // --- SEGREGAÇÃO ABSOLUTA DE STATUS ---
     if (mode === 'critical') {
         // Aba Críticos: EXCLUSIVAMENTE CRITICO
         data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
@@ -280,9 +283,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 const cteNotes = notes.filter(n => n.cteId === item.id).sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date));
                 const noteCount = cteNotes.length;
                 
-                // --- LÓGICA DE COR DA NOTIFICAÇÃO (DINÂMICA) ---
-                // Se a última nota foi feita por outra pessoa -> Vermelho
-                // Se foi por você -> Azul
+                // --- LÓGICA DE COR DA NOTIFICAÇÃO ---
                 const lastNote = cteNotes[0];
                 const isExternal = lastNote && lastNote.user !== currentUser?.username;
                 const badgeColorClass = isExternal ? 'bg-red-600' : 'bg-indigo-600';

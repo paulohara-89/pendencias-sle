@@ -3,14 +3,12 @@ import Papa from 'papaparse';
 import { CTE, Note, User, ConfigData, Profile } from '../types';
 import { parseCurrency } from '../utils';
 
-// Using the Sheet ID from the "Edit" link provided to access via GVIZ API for specific tabs
 const SHEET_ID = '1hnZkQ2uWgKLu4gUmmfVaxfoHw8NKZmVOnv7lEJ8xWN0';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzPWSLErtpiqSP7StNxeXZVyObA2uzryNVZiVMgYI884Sr7S5JH3tT16CeNNLjps4YI/exec';
 
 const getSheetUrl = (sheetName: string) => 
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
 
-// Helper to ensure consistent ID generation (removes spaces, forces string)
 const generateId = (serie: any, cte: any) => {
     const s = serie ? String(serie).trim() : '';
     const c = cte ? String(cte).trim() : '';
@@ -19,18 +17,15 @@ const generateId = (serie: any, cte: any) => {
 
 export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], notes: Note[], profiles: Profile[], config: ConfigData }> => {
   try {
-    // Fetch all necessary tabs. 
-    // DATA tab is fetched WITHOUT headers because Row 1 contains actual data (DATA HOJE)
     const [baseData, usersData, profilesData, processControlData, notesTabData, configRaw] = await Promise.all([
       fetchCsv(getSheetUrl('BASE'), true),
       fetchCsv(getSheetUrl('USERS'), true),
       fetchCsv(getSheetUrl('PROFILES'), true),
       fetchCsv(getSheetUrl('PROCESS_CONTROL'), true), 
       fetchCsv(getSheetUrl('NOTES'), true),
-      fetchCsv(getSheetUrl('DATA'), false) // False here is key!
+      fetchCsv(getSheetUrl('DATA'), false) 
     ]);
 
-    // --- Process BASE (CTEs) ---
     const ctes: CTE[] = baseData.map((row: any) => ({
       id: generateId(row['SERIE'], row['CTE']),
       cte: String(row['CTE']).trim(),
@@ -51,7 +46,6 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
       justificativa: row['JUSTIFICATIVA']
     })).filter(c => c.cte && c.serie);
 
-    // --- Process USERS ---
     const users: User[] = usersData.map((row: any) => ({
       username: row['username'] || row['USERNAME'],
       password: row['password'] || row['PASSWORD'], 
@@ -60,14 +54,12 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
       linkedDestUnit: row['linkedDestUnit'] || row['LINKEDDESTUNIT'] || ''
     })).filter(u => u.username);
 
-    // --- Process PROFILES ---
     const profiles: Profile[] = profilesData.map((row: any) => ({
       name: row['NAME'] || row['ProfileName'],
       description: row['DESCRIPTION'] || row['Description'],
       permissions: row['PERMISSIONS'] || row['Permissions'] || '[]'
     })).filter(p => p.name);
 
-    // --- Process NOTES ---
     const baseTimestamp = Date.now();
     const processNoteRow = (row: any, index: number, sourcePrefix: string): Note | null => {
       const serie = row['SERIE'] || row['serie'] || row['Serie'] || '';
@@ -102,19 +94,15 @@ export const fetchAllData = async (): Promise<{ ctes: CTE[], users: User[], note
     });
     const notes = Array.from(uniqueNotesMap.values());
 
-    // --- Process CONFIG (DATA Tab - Using index because header:false) ---
-    // Row 0: ["DATA HOJE", "29/12/2025", "", "25/12/2025"]
-    // Row 1: ["DATA AMANHÃ", "30/12/2025", "", "31/12/2025"]
-    // Row 2: ["PRAZO LIMITE", "10", "", ""]
-    
+    // --- Extração de Configuração e Feriados ---
     const todayStr = (configRaw[0] && configRaw[0][1]) || new Date().toLocaleDateString('pt-BR');
     const tomorrowStr = (configRaw[1] && configRaw[1][1]) || '';
-    const limitDays = (configRaw[2] && parseInt(configRaw[2][1])) || 3;
+    const limitDays = (configRaw[2] && parseInt(configRaw[2][1])) || 10;
 
-    // Holidays are in Column D (Index 3)
+    // Feriados estão na Coluna D (índice 3)
     const holidays: string[] = configRaw
         .map(row => row[3])
-        .filter(val => typeof val === 'string' && val.match(/\d{2}\/\d{2}\/\d{4}/));
+        .filter(val => val && String(val).match(/\d{2}\/\d{2}\/\d{4}/));
 
     const config: ConfigData = {
       dataHoje: todayStr,
