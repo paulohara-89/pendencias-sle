@@ -100,9 +100,8 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in cursor-pointer" onClick={onClose}>
         <div className="bg-white w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative animate-scale-in cursor-auto" onClick={(e) => e.stopPropagation()}>
-            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-white/80 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-100"><i className="ph-bold ph-x text-xl"></i></button>
+            <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-white/80 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition shadow-sm text-gray-500 flex items-center justify-center border border-gray-100"><i className="ph-bold ph-x text-xl"></i></button>
             
-            {/* Sidebar de Informações do CTE */}
             <div className="w-full md:w-1/3 bg-gray-50 p-6 overflow-y-auto border-r border-gray-100 hidden md:block pt-12 md:pt-6">
                 <div className="mb-6"><h2 className="text-2xl font-bold text-gray-800 tracking-tighter">{cte.cte}</h2><p className="text-sm text-gray-500 font-medium">Série {cte.serie}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -127,7 +126,6 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                 </div>
             </div>
             
-            {/* Área de Chat / Notas */}
             <div className="flex-1 flex flex-col bg-white overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-white z-10 pt-6 flex items-center gap-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-primary"><i className="ph-fill ph-chat-circle-text text-xl"></i></div><h3 className="font-bold text-gray-800 text-sm">Tratativas e Evidências</h3></div>
                 
@@ -157,9 +155,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
                     )}
                 </div>
 
-                {/* Input e Previews de Imagem */}
                 <div className="bg-white border-t border-gray-100 shadow-lg">
-                    {/* ÁREA DE PREVIEW DE IMAGENS SELECIONADAS */}
                     {previews.length > 0 && (
                       <div className="p-3 bg-gray-50 flex gap-3 overflow-x-auto no-scrollbar border-b border-gray-100 animate-fade-in">
                         {previews.map((src, i) => (
@@ -207,6 +203,7 @@ export const DetailModal = ({ cte, onClose }: { cte: CTE; onClose: () => void })
 
 export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }) => {
   const { ctes, notes, currentUser, setSelectedCteId } = useApp();
+  const { addToast } = useToast();
   const [filterText, setFilterText] = useState('');
   const [selectedDestUnit, setSelectedDestUnit] = useState<string>('all');
   const [flowFilter, setFlowFilter] = useState<'all' | 'inbound' | 'outbound'>('inbound'); 
@@ -220,6 +217,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
 
   const destinationUnits = useMemo(() => Array.from(new Set(ctes.map(c => c.entrega).filter(Boolean))).sort(), [ctes]);
 
+  // Set default unit for non-global users and LOCK if linked
   useEffect(() => {
     if (!isGlobalUser && currentUser?.linkedDestUnit) setSelectedDestUnit(currentUser.linkedDestUnit);
   }, [currentUser, isGlobalUser]);
@@ -235,6 +233,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   const filteredData = useMemo(() => {
     let data = ctes;
     
+    // 1. Filtragem por texto (Busca Global de CTE) - Ignora travas de unidade
     if (filterText) {
         const term = filterText.toLowerCase();
         data = data.filter(c => 
@@ -243,28 +242,36 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             c.destinatario?.toLowerCase().includes(term)
         );
     } else {
+        // 2. Filtragem por Unidade e Status - Respeita "EM BUSCA" globalmente
         if (!isGlobalUser) {
             const myDest = currentUser?.linkedDestUnit?.trim().toLowerCase();
             const myOrigin = currentUser?.linkedOriginUnit?.trim().toLowerCase();
             
-            if (flowFilter === 'outbound') {
-                if (myOrigin) {
-                    data = data.filter(c => c.coleta.toLowerCase().includes(myOrigin));
-                }
-            } else {
+            data = data.filter(c => {
+                // Exceção: Status "EM BUSCA" é global
+                if (c.status === 'EM BUSCA') return true;
+
+                // Se houver seleção manual e o usuário puder mudar (ou for a dele)
                 if (selectedDestUnit !== 'all') {
-                    data = data.filter(c => c.entrega === selectedDestUnit);
-                } else if (myDest) {
-                    data = data.filter(c => c.entrega.toLowerCase().includes(myDest));
+                    return c.entrega === selectedDestUnit;
                 }
-            }
+
+                // Lógica de fluxo para usuários vinculados
+                if (flowFilter === 'outbound') {
+                    return myOrigin ? c.coleta.toLowerCase().includes(myOrigin) : false;
+                } else {
+                    return myDest ? c.entrega.toLowerCase().includes(myDest) : false;
+                }
+            });
         } else {
+            // Usuário sem trava (Admin/Leitor/Global): segue seleção manual
             if (selectedDestUnit !== 'all') {
                 data = data.filter(c => c.entrega === selectedDestUnit);
             }
         }
     }
 
+    // 3. Filtragem por Aba de Navegação
     if (mode === 'critical') {
         data = data.filter(c => c.computedStatus === 'CRITICO' && c.status !== 'EM BUSCA');
     } else if (mode === 'search') {
@@ -273,6 +280,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
         data = data.filter(c => c.computedStatus !== 'CRITICO' && c.status !== 'EM BUSCA');
     }
 
+    // 4. Filtros de Pagamento e Notas
     if (paymentFilters.length > 0) {
         data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
     }
@@ -291,6 +299,45 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
     });
   }, [ctes, mode, filterText, currentUser, selectedDestUnit, isGlobalUser, sortConfig, flowFilter, paymentFilters, noteFilter, notes]);
 
+  const handleExport = () => {
+    if (filteredData.length === 0) {
+      addToast('Não há dados para exportar.', 'warning');
+      return;
+    }
+
+    const exportData = filteredData.map(item => {
+      const cteNotes = notes
+        .filter(n => n.cteId === item.id)
+        .sort((a, b) => parseDateTime(b.date) - parseDateTime(a.date));
+      const lastNote = cteNotes[0]?.text || '';
+
+      return {
+        'CTE': item.cte,
+        'Série': item.serie,
+        'Destinatário': item.destinatario,
+        'Data Emissão': item.dataEmissao,
+        'Data Limite': item.dataLimite,
+        'Status': item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' '),
+        'Pagamento': item.fretePago,
+        'Origem': item.coleta,
+        'Destino': item.entrega,
+        'Última Tratativa': lastNote
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Pendencias");
+    
+    // Nome do arquivo agora inclui o nome do usuário após a data
+    const dateFormatted = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const userName = currentUser?.username || 'desconhecido';
+    const fileName = `Export_${mode}_${dateFormatted}_${userName}.xlsx`;
+    
+    XLSX.writeFile(workbook, fileName);
+    addToast('Relatório gerado!', 'success');
+  };
+
   return (
     <div className="space-y-6 pb-20 max-w-full overflow-hidden">
       <div className="glass-panel p-5 rounded-3xl space-y-4 border border-white/50 shadow-sm">
@@ -298,19 +345,27 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
             <div className="flex flex-col md:flex-row items-stretch gap-3 flex-1">
                 <div className="relative flex-1 md:max-w-md">
                     <i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input type="text" placeholder="Busca Global..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" />
+                    <input type="text" placeholder="Busca Global de CTE..." value={filterText} onChange={(e) => setFilterText(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white outline-none focus:border-primary/40 transition shadow-inner" />
                 </div>
                 
                 <div className="flex gap-2">
-                    {isGlobalUser ? (
-                        <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={selectedDestUnit} onChange={(e) => setSelectedDestUnit(e.target.value)}>
-                            <option value="all">TODAS AS UNIDADES</option>
-                            {destinationUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                        </select>
-                    ) : (
+                    <div className="relative">
+                      <select 
+                        disabled={!isGlobalUser}
+                        className={`pl-10 pr-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner appearance-none min-w-[200px] ${!isGlobalUser ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`} 
+                        value={selectedDestUnit} 
+                        onChange={(e) => setSelectedDestUnit(e.target.value)}
+                      >
+                        <option value="all">TODAS AS UNIDADES</option>
+                        {destinationUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                      <i className={`ph-bold ${isGlobalUser ? 'ph-map-pin' : 'ph-lock-key'} absolute left-4 top-1/2 transform -translate-y-1/2 text-indigo-400`}></i>
+                    </div>
+                    
+                    {!isGlobalUser && (
                         <select className="px-4 py-3 rounded-2xl border border-gray-200 bg-white text-xs font-black uppercase tracking-tighter outline-none shadow-inner" value={flowFilter} onChange={(e) => setFlowFilter(e.target.value as any)}>
-                            <option value="inbound">CHEGADA (DESTINO)</option>
-                            <option value="outbound">SAÍDA (ORIGEM)</option>
+                            <option value="inbound">MEU FLUXO ENTRADA</option>
+                            <option value="outbound">MEU FLUXO SAÍDA</option>
                         </select>
                     )}
                 </div>
@@ -322,6 +377,14 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         {type.replace(/_/g, ' ')}
                     </button>
                 ))}
+                
+                <button 
+                  onClick={handleExport}
+                  title="Exportar Excel"
+                  className="ml-2 p-3 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm active:scale-90"
+                >
+                  <i className="ph-bold ph-file-xls text-xl"></i>
+                </button>
             </div>
         </div>
       </div>
@@ -379,7 +442,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                             <button onClick={() => setSelectedCteId(item.id)} className="relative w-10 h-10 rounded-2xl bg-gray-100 text-gray-500 hover:bg-primary hover:text-white transition shadow-sm border border-gray-200 flex items-center justify-center ml-auto active:scale-90">
                                 <i className="ph-bold ph-chat-circle-dots text-lg"></i>
                                 {noteCount > 0 && (
-                                  <span className={`absolute -top-1.5 -right-1.5 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-pulse ${badgeColor}`}>
+                                  <span className={`absolute -top-1.5 -right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-pulse ${badgeColor}`}>
                                     {noteCount}
                                   </span>
                                 )}
@@ -407,7 +470,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <span className="text-xs font-black text-gray-900">{item.dataLimite}</span>
                         <div className="relative w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                             <i className="ph-bold ph-chat-circle-dots text-xl"></i>
-                            {noteCount > 0 && <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full">{noteCount}</span>}
+                            {noteCount > 0 && <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">{noteCount}</span>}
                         </div>
                     </div>
                 </div>

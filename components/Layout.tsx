@@ -140,8 +140,6 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
             const isMe = n.user === currentUser.username;
             const isNoteSearch = n.statusBusca || n.text.toUpperCase().includes('BUSCA') || n.text.toUpperCase().includes('LOCALIZADA');
             
-            // --- COR DINÂMICA (SINO) ---
-            // Vermelho para interação de terceiros, Azul para interação própria
             const statusColor = isMe ? 'bg-primary' : 'bg-red-600';
 
             list.push({ 
@@ -303,14 +301,18 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
            
            <div className="flex items-center gap-6">
              <div className="relative cursor-pointer group" ref={notifRef}>
-               <div className={`p-2 rounded-full transition ${isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
-                 <i className={`text-2xl ${isNotifOpen ? 'ph-fill ph-bell' : 'ph-light ph-bell'}`}></i>
-                 {unreadCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-white animate-bounce">{unreadCount}</span>}
+               <div className={`p-2 rounded-full transition ${unreadCount > 0 ? 'bg-yellow-100/50 text-yellow-600' : isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
+                 <i className={`text-2xl ${unreadCount > 0 || isNotifOpen ? 'ph-fill ph-bell' : 'ph-light ph-bell'}`}></i>
+                 {unreadCount > 0 && (
+                   <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-600 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-md animate-bounce px-1">
+                     {unreadCount}
+                   </span>
+                 )}
                </div>
                {isNotifOpen && (
                  <div className="absolute right-0 top-12 w-80 md:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in origin-top-right z-50">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                        <div className="flex items-center gap-2"><h3 className="font-bold text-gray-800">Notificações</h3><span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{unreadCount}</span></div>
+                        <div className="flex items-center gap-2"><h3 className="font-bold text-gray-800">Notificações</h3><span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-black">{unreadCount} NOVAS</span></div>
                         {unreadCount > 0 && <button onClick={() => { const allIds = notifications.map(n => n.id); setReadNotificationIds(prev => Array.from(new Set([...prev, ...allIds]))); }} className="text-[10px] font-bold text-primary hover:underline">Limpar todas</button>}
                     </div>
                     <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
