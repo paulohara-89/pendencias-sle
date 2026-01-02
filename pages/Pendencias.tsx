@@ -223,7 +223,15 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
   }, [currentUser, isGlobalUser]);
 
   const togglePaymentFilter = (type: string) => {
-    setPaymentFilters(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+    if (!type) return;
+    const norm = type.toUpperCase().trim();
+    let filterVal = norm;
+    if (norm.includes('CIF')) filterVal = 'CIF';
+    else if (norm.includes('FOB')) filterVal = 'FOB';
+    else if (norm.includes('REMETENTE')) filterVal = 'FATURAR_REMETENTE';
+    else if (norm.includes('DEST')) filterVal = 'FATURAR_DEST';
+
+    setPaymentFilters(prev => prev.includes(filterVal) ? prev.filter(t => t !== filterVal) : [...prev, filterVal]);
   };
 
   const handleSort = (key: SortKey) => {
@@ -251,10 +259,9 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 // Exceção: Status "EM BUSCA" é global
                 if (c.status === 'EM BUSCA') return true;
 
-                // Se o usuário está filtrando por SAÍDA, ignoramos o filtro de unidade destino manual (cadeado)
-                // e focamos estritamente na Origem do usuário.
+                // Se o usuário está filtrando por SAÍDA, ignoramos o filtro de unidade destino manual
                 if (flowFilter === 'outbound') {
-                    return myOrigin ? c.coleta.toLowerCase().includes(myOrigin) : false;
+                    return myOrigin && c.coleta.toLowerCase().includes(myOrigin);
                 } 
 
                 // Caso contrário (ENTRADA), usamos o destino vinculado ou selecionado
@@ -262,7 +269,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                     return c.entrega === selectedDestUnit;
                 }
 
-                return myDest ? c.entrega.toLowerCase().includes(myDest) : false;
+                return myDest && c.entrega.toLowerCase().includes(myDest);
             });
         } else {
             // Usuário sem trava (Admin/Leitor/Global): segue seleção manual
@@ -283,7 +290,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
 
     // 4. Filtros de Pagamento e Notas
     if (paymentFilters.length > 0) {
-        data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase())));
+        data = data.filter(c => paymentFilters.some(pf => c.fretePago?.toUpperCase().includes(pf.toUpperCase().replace('_', ' '))));
     }
     if (noteFilter !== 'all') {
         data = data.filter(c => {
@@ -330,10 +337,9 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Pendencias");
     
-    // Nome do arquivo agora inclui o nome do usuário após a data
     const dateFormatted = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
     const userName = currentUser?.username || 'desconhecido';
-    const fileName = `Export_${mode}_${dateFormatted}_${userName}.xlsx`;
+    const fileName = `Relatorio_${mode}_${dateFormatted}_${userName}.xlsx`;
     
     XLSX.writeFile(workbook, fileName);
     addToast('Relatório gerado!', 'success');
@@ -382,7 +388,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                 <button 
                   onClick={handleExport}
                   title="Exportar Excel"
-                  className="ml-2 h-9 w-10 md:w-12 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm active:scale-90"
+                  className="ml-2 h-10 w-11 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm active:scale-95"
                 >
                   <i className="ph-bold ph-file-xls text-xl"></i>
                 </button>
@@ -419,7 +425,7 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
 
                 return (
                     <tr key={item.id} className="hover:bg-white/80 transition group h-20">
-                        <td className="p-4 pl-6 font-bold text-primary truncate">{item.cte} / {item.serie}</td>
+                        <td className="p-4 pl-6 font-bold text-primary truncate cursor-pointer" onClick={() => setSelectedCteId(item.id)}>{item.cte} / {item.serie}</td>
                         <td className="p-4">
                             <div className="text-[11px] font-semibold text-gray-700 line-clamp-2" title={item.destinatario}>
                                 {item.destinatario}
@@ -428,8 +434,8 @@ export const PendenciasList = ({ mode }: { mode: 'all' | 'critical' | 'search' }
                         <td className="p-4 text-xs font-black text-gray-900">{item.dataLimite}</td>
                         <td className="p-4">
                             <div className="flex flex-col gap-1 items-start">
-                                <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter shadow-sm border ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</span>
-                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</span>
+                                <button onClick={() => setSelectedCteId(item.id)} className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-tighter shadow-sm border hover:scale-105 transition-transform ${item.status === 'EM BUSCA' ? 'bg-purple-600 text-white border-purple-800' : getStatusColor(item.computedStatus || 'NO_PRAZO')}`}>{item.status === 'EM BUSCA' ? 'EM BUSCA' : item.computedStatus?.replace(/_/g, ' ')}</button>
+                                <button onClick={() => togglePaymentFilter(item.fretePago)} className={`px-2 py-0.5 rounded text-[8px] font-black uppercase hover:scale-105 transition-transform ${getPaymentColor(item.fretePago)}`}>{item.fretePago}</button>
                             </div>
                         </td>
                         <td className="p-4">

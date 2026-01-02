@@ -127,8 +127,9 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
         }
     });
 
-    const recentNotes = [...notes].sort((a,b) => parseDateTime(b.date) - parseDateTime(a.date)).slice(0, 30);
-    recentNotes.forEach(n => {
+    // Fix: Removed incorrect recentNotes and fix comment, sortedNotes is already correctly defined.
+    const sortedNotes = [...notes].sort((a, b) => parseDateTime(b.date) - parseDateTime(a.date)).slice(0, 30);
+    sortedNotes.forEach(n => {
         const relevantCte = ctes.find(c => c.id === n.cteId);
         if (relevantCte) {
             const isUserInvolved = isGlobalUser || 
@@ -301,10 +302,10 @@ export const Layout = ({ children }: React.PropsWithChildren) => {
            
            <div className="flex items-center gap-6">
              <div className="relative cursor-pointer group" ref={notifRef}>
-               <div className={`p-2 rounded-full transition ${unreadCount > 0 ? 'bg-yellow-400 text-white shadow-lg' : isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-600'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
+               <div className={`p-2 rounded-full transition-all duration-300 ${unreadCount > 0 ? 'bg-yellow-400 text-white shadow-[0_0_15px_rgba(250,204,21,0.5)]' : isNotifOpen ? 'bg-indigo-50 text-secondary' : 'hover:bg-white hover:shadow-sm text-gray-400'}`} onClick={() => setIsNotifOpen(!isNotifOpen)}>
                  <i className={`text-2xl ${unreadCount > 0 || isNotifOpen ? 'ph-fill ph-bell' : 'ph-light ph-bell'}`}></i>
                  {unreadCount > 0 && (
-                   <span className="absolute -top-1.5 -right-1.5 min-w-[24px] h-6 bg-red-600 text-white text-[11px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-xl animate-bounce px-1.5">
+                   <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] bg-red-600 text-white text-[11px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-xl animate-bounce">
                      {unreadCount}
                    </span>
                  )}
@@ -369,7 +370,7 @@ const ChangePasswordModal = ({ onClose, username }: { onClose: () => void, usern
   };
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-scale-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-sm p-6 animate-scale-in">
         <h3 className="text-xl font-bold text-primary mb-4">Mudar Senha</h3>
         <input type="password" placeholder="Nova Senha" className="w-full mb-3 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none" value={newPass} onChange={e => setNewPass(e.target.value)} />
         <input type="password" placeholder="Confirmar Senha" className="w-full mb-6 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />

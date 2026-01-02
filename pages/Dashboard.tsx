@@ -120,7 +120,7 @@ export const Dashboard = () => {
   ].filter(d => d.value > 0); 
 
   const efficiencyData = useMemo(() => {
-      const groupByKey = (selectedDestUnit === 'all') ? 'entrega' : 'coleta';
+      const groupByKey = isGlobalUser ? 'entrega' : 'coleta';
       const groups: Record<string, { positive: number; negative: number; total: number }> = {};
 
       filteredCtes.forEach(c => {
@@ -148,12 +148,13 @@ export const Dashboard = () => {
           }))
           .filter(d => d.total > 0)
           .sort((a, b) => {
+              if (!isGlobalUser) return b.negative - a.negative; // For units, sort by absolute late volume
               if (efficiencySort === 'vol') return b.total - a.total; 
               if (efficiencySort === 'asc') return (a.efficiency - b.efficiency) || (b.total - a.total); 
               return (b.efficiency - a.efficiency) || (b.total - a.total); 
           })
           .slice(0, 15); 
-  }, [filteredCtes, selectedDestUnit, efficiencySort]);
+  }, [filteredCtes, isGlobalUser, efficiencySort]);
 
   const offendersData = useMemo(() => {
      const grouped = filteredCtes.reduce<Record<string, AgencyMetric>>((acc, curr) => {
@@ -210,9 +211,12 @@ export const Dashboard = () => {
   };
 
   const getEfficiencyColor = (value: number) => {
-      if (value >= 90) return '#10b981'; 
-      if (value >= 70) return '#f59e0b'; 
-      return '#ef4444'; 
+      if (isGlobalUser) {
+          if (value >= 90) return '#10b981'; 
+          if (value >= 70) return '#f59e0b'; 
+          return '#ef4444'; 
+      }
+      return '#ef4444'; // For linked units, we show late volume in red
   };
 
   return (
@@ -228,22 +232,24 @@ export const Dashboard = () => {
                 <i className="ph-fill ph-map-pin text-indigo-500"></i>
                 <div className="flex flex-col flex-1 md:flex-none">
                   <span className="text-[10px] font-bold text-gray-400 uppercase">Unidade Destino</span>
-                  {isGlobalUser ? (
-                    <select 
-                      value={selectedDestUnit}
-                      onChange={(e) => setSelectedDestUnit(e.target.value)}
-                      className="bg-transparent font-bold text-gray-800 text-sm focus:outline-none cursor-pointer w-full"
-                    >
-                      <option value="all">Todas as Unidades</option>
-                      {destinationUnits.map(unit => (
-                        <option key={unit} value={unit}>{unit}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                        {currentUser?.linkedDestUnit || 'Todas'} <i className="ph-bold ph-lock-key text-gray-300 text-xs"></i>
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                      {isGlobalUser ? (
+                        <select 
+                          value={selectedDestUnit}
+                          onChange={(e) => setSelectedDestUnit(e.target.value)}
+                          className="bg-transparent font-bold text-gray-800 text-sm focus:outline-none cursor-pointer w-full"
+                        >
+                          <option value="all">Todas as Unidades</option>
+                          {destinationUnits.map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                            {currentUser?.linkedDestUnit || 'Todas'} <i className="ph-bold ph-lock-key text-gray-300 text-xs"></i>
+                        </span>
+                      )}
+                  </div>
                 </div>
              </div>
 
@@ -304,24 +310,29 @@ export const Dashboard = () => {
               <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shrink-0">
                  <div>
                     <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                        <i className="ph-fill ph-ranking text-primary"></i> Ranking de Eficiência
+                        <i className="ph-fill ph-ranking text-primary"></i> 
+                        {isGlobalUser ? "Ranking de Eficiência" : `Origens Críticas para ${currentUser?.linkedDestUnit}`}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
-                        Top 15 unidades/agências baseadas na % de entregas no prazo.
+                        {isGlobalUser 
+                          ? "Top 15 unidades/agências baseadas na % de entregas no prazo." 
+                          : "Unidades que mais enviam mercadorias em atraso para sua unidade."}
                     </p>
                  </div>
-                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-xl self-start flex-wrap">
-                     <button onClick={() => setEfficiencySort('asc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Ofensores</button>
-                     <button onClick={() => setEfficiencySort('desc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'desc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Melhores</button>
-                     <button onClick={() => setEfficiencySort('vol')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Volume</button>
-                 </div>
+                 {isGlobalUser && (
+                   <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-xl self-start flex-wrap">
+                       <button onClick={() => setEfficiencySort('asc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'asc' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Ofensores</button>
+                       <button onClick={() => setEfficiencySort('desc')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'desc' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Melhores</button>
+                       <button onClick={() => setEfficiencySort('vol')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${efficiencySort === 'vol' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Volume</button>
+                   </div>
+                 )}
               </div>
 
               <div className="flex-1 w-full relative min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart layout="vertical" data={efficiencyData} margin={{ top: 5, right: 30, bottom: 5, left: 0 }} barSize={20}>
                         <CartesianGrid stroke="#f3f4f6" horizontal={true} vertical={false} strokeDasharray="3 3" />
-                        <XAxis type="number" domain={[0, 100]} hide />
+                        <XAxis type="number" domain={isGlobalUser ? [0, 100] : [0, 'auto']} hide />
                         <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 11, fill: '#6b7280', fontWeight: 600}} axisLine={false} tickLine={false} />
                         <Tooltip 
                             cursor={{ fill: 'rgba(0,0,0,0.02)' }}
@@ -332,7 +343,11 @@ export const Dashboard = () => {
                                     <div className="bg-white p-3 rounded-xl shadow-xl border border-gray-100 text-xs z-50">
                                         <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{data.name}</p>
                                         <div className="space-y-1">
-                                            <div className="flex justify-between gap-6"><span className="text-gray-500">Eficiência:</span><span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span></div>
+                                            {isGlobalUser ? (
+                                              <div className="flex justify-between gap-6"><span className="text-gray-500">Eficiência:</span><span className="font-bold" style={{color: getEfficiencyColor(data.efficiency)}}>{data.efficiency}%</span></div>
+                                            ) : (
+                                              <div className="flex justify-between gap-6"><span className="text-gray-500">Qtd. em Atraso:</span><span className="font-bold text-red-600">{data.negative}</span></div>
+                                            )}
                                             <div className="flex justify-between gap-6"><span className="text-gray-500">Volume Total:</span><span className="font-bold text-gray-800">{data.total}</span></div>
                                         </div>
                                     </div>
@@ -341,7 +356,7 @@ export const Dashboard = () => {
                                 return null;
                             }}
                         />
-                        <Bar dataKey="efficiency" radius={[0, 4, 4, 0]} background={{ fill: '#f9fafb', radius: [0, 4, 4, 0] }}>
+                        <Bar dataKey={isGlobalUser ? "efficiency" : "negative"} radius={[0, 4, 4, 0]} background={{ fill: '#f9fafb', radius: [0, 4, 4, 0] }}>
                              {efficiencyData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={getEfficiencyColor(entry.efficiency)} />
                              ))}
