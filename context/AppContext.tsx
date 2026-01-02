@@ -147,13 +147,20 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
         loading: false
       }));
 
+      // --- LOGICA DE ALERTA "EM BUSCA" ---
       if (state.currentUser) {
           const emBuscaItems = processedCTEs.filter(c => c.status === 'EM BUSCA');
           
           for (const item of emBuscaItems) {
-              const userHasReplied = data.notes.some(n => n.cteId === item.id && n.user === state.currentUser?.username);
+              // Verifica se já existe ALGUMA tratativa humana (ignorando a mensagem automática de marcação)
+              const followupNotes = data.notes.filter(n => 
+                n.cteId === item.id && 
+                !n.text.includes("marcada como: EM BUSCA") &&
+                !n.text.includes("INICIADO VIA OBS")
+              );
               
-              if (!userHasReplied) {
+              // Só dispara o alerta se NÃO houver tratativa de nenhum usuário
+              if (followupNotes.length === 0) {
                   if (!alertActive && !sessionTriggeredAlerts.has(item.id)) {
                       triggerAlert(item.id);
                       break; 
@@ -229,6 +236,11 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
   const addNote = async (cteId: string, text: string, images: string[] = [], isSearch: boolean = false, customStatus?: string): Promise<boolean> => {
     if (!state.currentUser) return false;
 
+    // Se houver um alerta ativo para este CTE, fechamos o alerta imediatamente ao enviar a nota
+    if (alertActive && alertCteId === cteId) {
+        dismissAlert();
+    }
+
     const targetCte = state.ctes.find(c => c.id === cteId);
     const { cte, serie, codigo } = extractCteInfo(cteId, targetCte);
 
@@ -264,7 +276,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
     const dateStr = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`;
 
     const isCurrentlyEmBusca = targetCte?.status === 'EM BUSCA';
-    // Logic to ensure "MERCADORIA LOCALIZADA" goes to process control
     const forceProcessControl = isSearch || isCurrentlyEmBusca || statusToSend === 'MERCADORIA LOCALIZADA' || statusToSend === 'RESOLVIDO';
 
     const newNote: Note = {
@@ -317,7 +328,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
      const targetCte = state.ctes.find(c => c.id === cteId);
      const { cte } = extractCteInfo(cteId, targetCte);
 
-     // First, add the closure note to history (this solves the "automatic message" request)
      await addNote(cteId, "Mercadoria LOCALIZADA. Processo de busca encerrado.", images, false, 'MERCADORIA LOCALIZADA');
 
      setState(prev => ({
@@ -326,7 +336,6 @@ export const AppProvider = ({ children }: React.PropsWithChildren) => {
          notes: prev.notes.map(n => n.cteId === cteId ? { ...n, statusBusca: false } : n) 
      }));
 
-     // Tell the sheet to stop the alarm/update status
      const res = await postDataToScript('stopAlarm', { cte: cte });
      return res && res.success;
   };
