@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CteData } from '../types';
 import StatusBadge from './StatusBadge';
-import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search } from 'lucide-react';
+import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -62,7 +62,7 @@ const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, 
 
 const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false }) => {
   const { user } = useAuth();
-  const { notes, getLatestNote, processedData } = useData();
+  const { notes, getLatestNote, processedData, isCteEmBusca } = useData();
 
   // --- Filter State ---
   const [selectedUnit, setSelectedUnit] = useState<string>('');
@@ -226,9 +226,11 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   // --- Export ---
   const handleExport = () => {
-    // Export with Latest Note Details included
+    // Export based on the CURRENTLY VISIBLE filtered list (sortedData)
     const exportData = sortedData.map(d => {
         const latestNote = getLatestNote(d.CTE);
+        const hasNotes = getNoteCount(d.CTE) > 0;
+        
         return {
             CTE: d.CTE,
             SERIE: d.SERIE,
@@ -242,13 +244,15 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
             QTD_NOTAS: getNoteCount(d.CTE),
             ULTIMA_NOTA_TEXTO: latestNote ? latestNote.TEXTO : '',
             ULTIMA_NOTA_USUARIO: latestNote ? latestNote.USUARIO : '',
-            ULTIMA_NOTA_DATA: latestNote ? latestNote.DATA : ''
+            ULTIMA_NOTA_DATA: latestNote ? latestNote.DATA : '',
+            // Inclui link da imagem se existir na última nota
+            LINK_IMAGEM: latestNote?.LINK_IMAGEM || ''
         };
     });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Pendencias_Atualizadas");
+    XLSX.utils.book_append_sheet(wb, ws, "Dados_Filtrados");
     const dateStr = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `Relatorio_SLE_${title.replace(/\s/g, '_')}_${dateStr}.xlsx`);
   };
@@ -443,10 +447,30 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
             {sortedData.map((row, idx) => {
               const noteCount = getNoteCount(row.CTE);
               const rowHasNotes = noteCount > 0;
+
+              // Check if item is "Em Busca" AND current user has NOT interacted
+              const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
+              const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
+              const needsAttention = isEmBusca && !userHasInteracted;
+
               return (
-                <tr key={`${row.CTE}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                <tr 
+                    key={`${row.CTE}-${idx}`} 
+                    className={clsx(
+                        "transition-colors",
+                        needsAttention 
+                            ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500 animate-[pulse_3s_ease-in-out_infinite]" 
+                            : "hover:bg-gray-50"
+                    )}
+                >
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
+                      {/* Prominent Label for Attention */}
+                      {needsAttention && (
+                          <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded animate-bounce">
+                             <AlertTriangle size={10} /> ATENÇÃO
+                          </span>
+                      )}
                       <StatusBadge 
                           status={row.STATUS_CALCULADO || row.STATUS} 
                           onClick={() => showFilters && row.STATUS_CALCULADO && setStatusFilters(prev => toggleFilter(prev, row.STATUS_CALCULADO!))}
@@ -485,14 +509,15 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                       onClick={() => onNoteClick(row)}
                       className={clsx(
                         "p-2 rounded-full relative transition-all group",
+                        needsAttention ? "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/30" :
                         rowHasNotes 
                           ? "text-orange-500 bg-orange-50 hover:bg-orange-100" 
                           : "text-gray-400 hover:text-primary-600 hover:bg-gray-100"
                       )}
-                      title={rowHasNotes ? "Ver Anotações" : "Adicionar Nota"}
+                      title={needsAttention ? "Confirmar Ciência" : (rowHasNotes ? "Ver Anotações" : "Adicionar Nota")}
                     >
                       <div className="relative">
-                        <MessageSquare size={18} fill={rowHasNotes ? "currentColor" : "none"} className={rowHasNotes ? "fill-orange-500/20" : ""} />
+                        <MessageSquare size={18} fill={rowHasNotes ? "currentColor" : "none"} className={rowHasNotes && !needsAttention ? "fill-orange-500/20" : ""} />
                         {rowHasNotes && (
                             <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm border border-white">
                                 {noteCount}
@@ -514,8 +539,24 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         {sortedData.map((row, idx) => {
            const noteCount = getNoteCount(row.CTE);
            const rowHasNotes = noteCount > 0;
+           
+           const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
+           const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
+           const needsAttention = isEmBusca && !userHasInteracted;
+
            return (
-            <div key={`${row.CTE}-${idx}`} className="bg-white p-4 rounded-lg shadow border-l-4 border-primary-500">
+            <div 
+                key={`${row.CTE}-${idx}`} 
+                className={clsx(
+                    "bg-white p-4 rounded-lg shadow border-l-4 transition-all",
+                    needsAttention ? "border-red-500 bg-red-50" : "border-primary-500"
+                )}
+            >
+              {needsAttention && (
+                  <div className="mb-2 flex items-center gap-2 text-red-600 font-bold text-xs bg-red-100 p-1.5 rounded w-fit">
+                      <AlertTriangle size={12} /> PENDÊNCIA DE BUSCA
+                  </div>
+              )}
               <div className="flex justify-between items-start mb-2">
                 <div>
                     <div className="text-lg font-bold text-gray-900">CTE {row.CTE}</div>
@@ -553,12 +594,14 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                   <button 
                     onClick={() => onNoteClick(row)}
                     className={clsx(
-                      "flex items-center font-medium text-sm transition-colors",
-                      rowHasNotes ? "text-orange-500" : "text-gray-500 hover:text-primary-600"
+                      "flex items-center font-medium text-sm transition-colors px-3 py-1.5 rounded-lg",
+                      needsAttention 
+                        ? "bg-red-600 text-white shadow-lg shadow-red-500/30" 
+                        : (rowHasNotes ? "text-orange-500" : "text-gray-500 hover:text-primary-600")
                     )}
                   >
                     <MessageSquare size={16} className="mr-1" fill={rowHasNotes ? "currentColor" : "none"} />
-                    {rowHasNotes ? `Ver Notas (${noteCount})` : 'Adicionar Nota'}
+                    {needsAttention ? "Resolver / Ciente" : (rowHasNotes ? `Ver Notas (${noteCount})` : 'Adicionar Nota')}
                   </button>
               </div>
             </div>

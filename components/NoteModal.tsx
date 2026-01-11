@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Camera, Image as ImageIcon, Paperclip, Loader2, Trash2, Clock, CheckCircle2, SearchCheck, MapPin, ZoomIn, AlertCircle, Check, AlertTriangle } from 'lucide-react';
-import { CteData, NoteData } from '../types';
+import { X, Send, Camera, Image as ImageIcon, Paperclip, Loader2, Trash2, Clock, CheckCircle2, SearchCheck, MapPin, ZoomIn, AlertCircle, Check, AlertTriangle, History } from 'lucide-react';
+import { CteData, NoteData, ProcessData } from '../types';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
@@ -149,10 +149,13 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
   const baseResolved = liveCte.STATUS === 'RESOLVIDO' || liveCte.STATUS === 'LOCALIZADA';
   const noteResolved = latestNote && (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA');
   
+  // Process History for this CTE
   const processHistory = processControlData.filter(p => 
     p.CTE === liveCte.CTE && 
     normalizeSerie(p.SERIE || '') === normalizeSerie(liveCte.SERIE || '')
   );
+  
+  // Check backend resolution
   const lastProcess = processHistory.length > 0 ? processHistory[processHistory.length - 1] : null;
   const processResolved = lastProcess?.STATUS === 'RESOLVIDO' || lastProcess?.STATUS === 'LOCALIZADA';
 
@@ -347,55 +350,102 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
         )}
 
         {/* Chat Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 scroll-smooth">
-          {currentNotes.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
-               <div className="bg-gray-100 p-3 rounded-full">
-                 <ImageIcon size={24} className="opacity-20" />
-               </div>
-               <span className="text-sm">Nenhuma nota registrada.</span>
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50 scroll-smooth">
+          
+          {/* Section: Notes */}
+          <div className="space-y-4">
+            {currentNotes.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-20 text-gray-400 gap-2 mb-2">
+                   <span className="text-sm italic">Nenhuma anotação registrada.</span>
+                </div>
+            )}
+            {currentNotes.map((note, idx) => {
+                const imageSource = note.LINK_IMAGEM || (note as any).base64Image;
+                const isPending = note.pending;
+                
+                return (
+                <div 
+                    key={idx} 
+                    className={clsx(
+                        "flex flex-col p-3 rounded-lg shadow-sm border relative group transition-all",
+                        isPending 
+                            ? "bg-orange-100/60 border-orange-200 opacity-80" 
+                            : "bg-white border-gray-100 hover:shadow-md"
+                    )}
+                >
+                    <div className="flex justify-between items-center text-xs text-gray-500 mb-2 pb-2 border-b border-gray-50">
+                    <div className="flex items-center gap-1.5">
+                        <div className={clsx(
+                            "w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px]",
+                            isPending ? "bg-orange-200 text-orange-800" : "bg-primary-100 text-primary-700"
+                        )}>
+                            {(note.USUARIO || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <span className={clsx("font-bold", isPending ? "text-orange-800" : "text-primary-700")}>{note.USUARIO || 'Desconhecido'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px]">{note.DATA}</span>
+                        {isPending ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={12} className="text-green-500" />}
+                    </div>
+                    </div>
+                    <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{note.TEXTO}</p>
+                    {imageSource && <NoteAttachment url={imageSource} onPreview={handleOpenPreview} />}
+                    {note.STATUS_BUSCA === 'EM BUSCA' && (
+                    <span className="mt-2 inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] px-2 py-1 rounded font-bold border border-red-100 w-fit">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        MERCADORIA EM BUSCA
+                    </span>
+                    )}
+                </div>
+                );
+            })}
+          </div>
+
+          {/* Section: Status History */}
+          {processHistory.length > 0 && (
+            <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 mb-3">
+                    <History size={14} /> Histórico de Alterações de Status
+                </h4>
+                <div className="space-y-0 relative">
+                    {/* Vertical Line */}
+                    <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gray-200"></div>
+
+                    {processHistory.slice().reverse().map((process, idx) => (
+                        <div key={idx} className="relative pl-6 pb-4 last:pb-0">
+                            {/* Dot */}
+                            <div className={clsx(
+                                "absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 flex items-center justify-center bg-white z-10",
+                                process.STATUS === 'RESOLVIDO' || process.STATUS === 'LOCALIZADA' ? 'border-green-500' :
+                                process.STATUS === 'EM BUSCA' ? 'border-red-500' : 'border-gray-400'
+                            )}>
+                                <div className={clsx("w-1.5 h-1.5 rounded-full", 
+                                     process.STATUS === 'RESOLVIDO' || process.STATUS === 'LOCALIZADA' ? 'bg-green-500' :
+                                     process.STATUS === 'EM BUSCA' ? 'bg-red-500' : 'bg-gray-400'
+                                )}></div>
+                            </div>
+
+                            <div className="bg-white p-2 rounded border border-gray-100 shadow-sm">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className={clsx("text-[10px] font-bold px-1.5 py-0.5 rounded", 
+                                        process.STATUS === 'RESOLVIDO' || process.STATUS === 'LOCALIZADA' ? 'bg-green-100 text-green-700' :
+                                        process.STATUS === 'EM BUSCA' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                                    )}>
+                                        {process.STATUS || 'REGISTRO'}
+                                    </span>
+                                    <span className="text-[10px] text-gray-400 font-mono">{process.DATA}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[11px] text-gray-600 mb-1">
+                                    <span className="font-bold text-gray-800">{process.USER}</span>
+                                </div>
+                                {process.DESCRIPTION && <p className="text-[11px] text-gray-500 italic">"{process.DESCRIPTION}"</p>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
           )}
-          {currentNotes.map((note, idx) => {
-            const imageSource = note.LINK_IMAGEM || (note as any).base64Image;
-            const isPending = note.pending;
-            
-            return (
-              <div 
-                key={idx} 
-                className={clsx(
-                    "flex flex-col p-3 rounded-lg shadow-sm border relative group transition-all",
-                    isPending 
-                        ? "bg-orange-100/60 border-orange-200 opacity-80" 
-                        : "bg-white border-gray-100 hover:shadow-md"
-                )}
-              >
-                 <div className="flex justify-between items-center text-xs text-gray-500 mb-2 pb-2 border-b border-gray-50">
-                   <div className="flex items-center gap-1.5">
-                      <div className={clsx(
-                          "w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px]",
-                          isPending ? "bg-orange-200 text-orange-800" : "bg-primary-100 text-primary-700"
-                      )}>
-                          {(note.USUARIO || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <span className={clsx("font-bold", isPending ? "text-orange-800" : "text-primary-700")}>{note.USUARIO || 'Desconhecido'}</span>
-                   </div>
-                   <div className="flex items-center gap-2">
-                       <span className="font-mono text-[10px]">{note.DATA}</span>
-                       {isPending ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={12} className="text-green-500" />}
-                   </div>
-                 </div>
-                 <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{note.TEXTO}</p>
-                 {imageSource && <NoteAttachment url={imageSource} onPreview={handleOpenPreview} />}
-                 {note.STATUS_BUSCA === 'EM BUSCA' && (
-                   <span className="mt-2 inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] px-2 py-1 rounded font-bold border border-red-100 w-fit">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      MERCADORIA EM BUSCA
-                   </span>
-                 )}
-              </div>
-            );
-          })}
+
         </div>
 
         {/* Input Form */}
