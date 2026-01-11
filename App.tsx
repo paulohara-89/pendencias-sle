@@ -50,7 +50,8 @@ const AppContent: React.FC = () => {
         return (
            <DataTable 
             title="Mercadorias em Busca" 
-            data={processedData.filter(d => isCteEmBusca(d.CTE, d.STATUS))}
+            // Fix: Pass SERIE to isCteEmBusca
+            data={processedData.filter(d => isCteEmBusca(d.CTE, d.SERIE, d.STATUS))}
             onNoteClick={setSelectedCte}
           />
         );
@@ -65,7 +66,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AlertOverlay />
+      <AlertOverlay onOpenCte={setSelectedCte} />
       <Sidebar currentPage={currentPage} setPage={setCurrentPage} logout={logout} />
       
       <main className="flex-1 flex flex-col overflow-hidden">

@@ -31,6 +31,17 @@ export interface NoteData {
   pending?: boolean; // Flag visual para indicar carregamento
 }
 
+export interface ProcessData {
+  ID: string;
+  CTE: string;
+  SERIE: string;
+  DATA: string;
+  USER: string;
+  DESCRIPTION: string;
+  LINK: string;
+  STATUS: string;
+}
+
 export interface UserData {
   username: string;
   password?: string;

@@ -7,27 +7,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#FCFCFE',
         primary: {
-          50: '#E8E8F9',
-          100: '#D1D2F4',
-          200: '#BFC0EF',
-          300: '#9798E4',
-          400: '#6E71DA',
-          500: '#4649CF',
-          600: '#2E31B4',
-          700: '#24268B',
-          800: '#1A1B62',
-          900: '#0F103A',
-        },
-        status: {
-          late: '#ef4444',
-          critical: '#ef4444',
-          priority: '#f97316',
-          tomorrow: '#eab308',
-          ontime: '#22c5e5',
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
         }
-      },
+      }
     },
   },
   plugins: [],

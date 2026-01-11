@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CRITICAL: Forces full height so charts don't crash */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: #f9fafb; /* Light gray background */
+}
+
+/* Fix for Recharts ResponsiveContainer crash */
+.recharts-responsive-container {
+  min-height: 300px;
+  width: 100% !important;
+}

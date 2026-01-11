@@ -20,7 +20,6 @@ const Dashboard: React.FC = () => {
   const [viewMode, setViewMode] = useState<'qty' | 'value'>('qty');
   const [pieMode, setPieMode] = useState<'status' | 'payment'>('status');
 
-  // Constants & Maps
   const STATUS_COLORS: Record<string, string> = {
     'CRÍTICO': COLORS.critical,
     'FORA DO PRAZO': COLORS.late,
@@ -30,19 +29,15 @@ const Dashboard: React.FC = () => {
   };
 
   const PAYMENT_COLORS: Record<string, string> = {
-    'CIF': '#10b981',             // Verde
-    'FOB': '#ef4444',             // Vermelho
-    'FATURAR_REMETENTE': '#eab308', // Amarelo
-    'FATURAR_DEST': '#f97316'     // Laranja
+    'CIF': '#10b981',             
+    'FOB': '#ef4444',             
+    'FATURAR_REMETENTE': '#eab308', 
+    'FATURAR_DEST': '#f97316'     
   };
-
-  // --- Helpers ---
 
   const cleanLabel = (name: string) => {
     if (!name) return '';
     let cleaned = name.replace(/^(DEC|FILIAL)\s*-?\s*/i, '');
-    // Ensure single line by aggressively truncating if needed, though width increase handles most.
-    // Increased truncate limit slightly as we will give more width to YAxis
     if (cleaned.length > 18) {
       return cleaned.substring(0, 18) + '...';
     }
@@ -56,8 +51,18 @@ const Dashboard: React.FC = () => {
     return list.includes(item) ? list.filter(i => i !== item) : [...list, item];
   };
 
-  // --- Data Processing ---
+  const safeParseValue = (valStr: string | undefined | null) => {
+    if (!valStr) return 0;
+    try {
+      // Remove R$, spaces and other non-numeric chars except comma and minus
+      const clean = valStr.replace(/[^\d,-]/g, '').replace(',', '.');
+      return parseFloat(clean) || 0;
+    } catch (e) {
+      return 0;
+    }
+  };
 
+  // --- Data Processing ---
   const isUserUnitBound = !!user?.linkedDestUnit;
   const activeUnit = isUserUnitBound ? user.linkedDestUnit : selectedUnit;
 
@@ -106,7 +111,7 @@ const Dashboard: React.FC = () => {
     let val = 0;
     fullyFilteredData.forEach(d => {
       qty++;
-      val += parseFloat(d.VALOR_CTE.replace(/\./g, '').replace(',', '.')) || 0;
+      val += safeParseValue(d.VALOR_CTE);
     });
     return { qty, val };
   }, [fullyFilteredData]);
@@ -115,7 +120,7 @@ const Dashboard: React.FC = () => {
     const counts: Record<string, { qty: number, val: number }> = {};
     statusCardsData.forEach(item => {
       const status = item.STATUS_CALCULADO || 'OUTROS';
-      const v = parseFloat(item.VALOR_CTE.replace(/\./g, '').replace(',', '.')) || 0;
+      const v = safeParseValue(item.VALOR_CTE);
       if (!counts[status]) counts[status] = { qty: 0, val: 0 };
       counts[status].qty++;
       counts[status].val += v;
@@ -127,7 +132,7 @@ const Dashboard: React.FC = () => {
     const counts: Record<string, { qty: number, val: number }> = {};
     paymentCardsData.forEach(item => {
       const type = item.FRETE_PAGO || 'OUTROS';
-      const v = parseFloat(item.VALOR_CTE.replace(/\./g, '').replace(',', '.')) || 0;
+      const v = safeParseValue(item.VALOR_CTE);
       if (!counts[type]) counts[type] = { qty: 0, val: 0 };
       counts[type].qty++;
       counts[type].val += v;
@@ -154,8 +159,7 @@ const Dashboard: React.FC = () => {
         barMap[key]['OUTROS'] = 0;
       }
 
-      const valStr = item.VALOR_CTE.replace(/\./g, '').replace(',', '.');
-      const val = parseFloat(valStr) || 0;
+      const val = safeParseValue(item.VALOR_CTE);
       const metric = viewMode === 'qty' ? 1 : val;
       const payType = item.FRETE_PAGO || 'OUTROS';
 
@@ -172,8 +176,7 @@ const Dashboard: React.FC = () => {
 
     fullyFilteredData.forEach(item => {
         const key = pieMode === 'status' ? (item.STATUS_CALCULADO || 'OUTROS') : (item.FRETE_PAGO || 'OUTROS');
-        const valStr = item.VALOR_CTE.replace(/\./g, '').replace(',', '.');
-        const val = parseFloat(valStr) || 0;
+        const val = safeParseValue(item.VALOR_CTE);
         const metric = viewMode === 'qty' ? 1 : val;
 
         if (tempMap[key]) {
@@ -192,15 +195,12 @@ const Dashboard: React.FC = () => {
   }, [fullyFilteredData, activeUnit, viewMode, pieMode]);
 
   const handleBarClick = (data: any) => {
-      if (activeUnit) return; // Don't allow drill-down if already drilling down
+      if (activeUnit) return; 
 
       let targetFullName = '';
-
-      // Check if click came from a Bar (data has payload with fullName)
       if (data && data.fullName) {
         targetFullName = data.fullName;
       } 
-      // Check if click came from YAxis Tick (data is usually the value string or object)
       else if (data && (typeof data === 'string' || data.value)) {
         const val = typeof data === 'string' ? data : data.value;
         const found = chartData.barData.find((d: any) => d.name === val);
@@ -264,7 +264,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-500 h-full max-h-[calc(100vh-80px)] overflow-y-auto md:overflow-hidden pb-20 md:pb-0">
-      {/* 1. Header & Filters */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 shrink-0">
         <div className="flex items-center gap-3">
              <div className="bg-primary-100 p-2 rounded-lg text-primary-700 hidden md:block">
@@ -278,7 +277,6 @@ const Dashboard: React.FC = () => {
              </div>
         </div>
 
-        {/* Global Controls */}
         <div className="w-full lg:w-auto flex flex-col md:flex-row gap-2">
             {(statusFilters.length > 0 || paymentFilters.length > 0) && (
                 <button 
@@ -311,10 +309,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Combined KPI & Filters Block */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 shrink-0">
-         
-         {/* KPI Column (Total/Value) */}
          <div className="xl:col-span-2 grid grid-cols-2 xl:grid-cols-1 gap-3 h-full">
              <div className="bg-gradient-to-br from-primary-900 to-primary-800 rounded-xl p-4 shadow-lg text-white flex flex-col justify-center relative overflow-hidden group">
                 <div className="absolute right-[-15px] top-[-15px] opacity-10 group-hover:opacity-20 transition-all">
@@ -332,9 +327,7 @@ const Dashboard: React.FC = () => {
              </div>
          </div>
 
-         {/* Filters Area - Status & Payment Combined */}
          <div className="xl:col-span-10 flex flex-col gap-2">
-            {/* Status Row */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50 flex-1">
                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 h-full">
                     {['FORA DO PRAZO', 'CRÍTICO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'].map(status => (
@@ -351,7 +344,6 @@ const Dashboard: React.FC = () => {
                  </div>
             </div>
             
-            {/* Payment Row */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50">
                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full">
                     {Object.keys(PAYMENT_COLORS).map(type => (
@@ -370,9 +362,7 @@ const Dashboard: React.FC = () => {
          </div>
       </div>
 
-      {/* 3. Charts Area */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-        {/* Bar Chart */}
         <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full min-h-[400px]">
            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 shrink-0 gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -381,7 +371,6 @@ const Dashboard: React.FC = () => {
                     {chartData.groupByClient ? 'Ranking de Clientes' : 'Agências Ofensoras'}
                   </h3>
                   
-                  {/* Clear Button IN CHART */}
                   {!isUserUnitBound && activeUnit && (
                       <button 
                         onClick={() => setSelectedUnit('')}
@@ -461,7 +450,6 @@ const Dashboard: React.FC = () => {
            </div>
         </div>
 
-        {/* Pie Chart */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full min-h-[400px]">
            <div className="flex justify-between items-center mb-4 shrink-0">
               <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">

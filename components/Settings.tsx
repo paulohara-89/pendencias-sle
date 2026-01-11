@@ -63,7 +63,7 @@ const Settings: React.FC = () => {
 
   const togglePermission = (perm: string) => {
       if (!editingProfile) return;
-      const current = editingProfile.permissions;
+      const current = editingProfile.permissions || [];
       const newPerms = current.includes(perm) 
           ? current.filter(p => p !== perm) 
           : [...current, perm];
@@ -249,7 +249,7 @@ const Settings: React.FC = () => {
                                   >
                                       <Copy size={14} />
                                   </button>
-                                  {p.name.toUpperCase() !== 'ADMIN' && (
+                                  {p.name?.toUpperCase() !== 'ADMIN' && (
                                       <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -286,7 +286,7 @@ const Settings: React.FC = () => {
                                         className="w-full p-2.5 rounded border border-gray-300 focus:ring-2 focus:ring-primary-500 outline-none"
                                         value={editingProfile.name}
                                         onChange={e => setEditingProfile({...editingProfile, name: e.target.value})}
-                                        disabled={profiles.some(p => p.name === editingProfile.name && p.name.toUpperCase() === 'ADMIN')} // Admin name locked
+                                        disabled={profiles.some(p => p.name === editingProfile.name && p.name?.toUpperCase() === 'ADMIN')} // Admin name locked
                                       />
                                   </div>
                                   <div className="space-y-1">
@@ -303,7 +303,7 @@ const Settings: React.FC = () => {
                                   <label className="text-xs font-bold text-gray-500 uppercase mb-3 block">Permissões de Acesso</label>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                       {SYSTEM_PERMISSIONS.map(perm => {
-                                          const isChecked = editingProfile.permissions.includes(perm);
+                                          const isChecked = editingProfile.permissions?.includes(perm);
                                           return (
                                               <div 
                                                 key={perm} 

@@ -23,9 +23,46 @@ interface SortConfig {
   direction: SortDirection;
 }
 
+interface FilterCardProps {
+  label: string;
+  count: number;
+  color: string;
+  selected: boolean;
+  onClick: () => void;
+}
+
+const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, onClick }) => (
+  <div 
+      onClick={onClick}
+      className={clsx(
+          "rounded-lg p-2 border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:shadow-sm min-h-[60px]",
+          selected 
+              ? "bg-white ring-1 ring-inset" 
+              : "bg-gray-50 border-gray-200 hover:bg-white"
+      )}
+      style={{ 
+          borderColor: selected ? color : undefined, 
+          backgroundColor: selected ? `${color}08` : undefined
+      }}
+  >
+      {selected && (
+          <div className="absolute top-1 right-1">
+              <CheckCircle size={12} fill={color} className="text-white" />
+          </div>
+      )}
+      <span className="font-bold text-[10px] uppercase tracking-wider text-gray-500 truncate block pr-3" style={{ color: selected ? color : undefined }}>
+          {label}
+      </span>
+      <div className="mt-1">
+          <span className="text-lg font-bold text-gray-800 leading-none">{count}</span>
+      </div>
+      <div className="absolute bottom-0 left-0 h-0.5 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.3 }} />
+  </div>
+);
+
 const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false }) => {
   const { user } = useAuth();
-  const { notes, getLatestNote } = useData();
+  const { notes, getLatestNote, processedData } = useData();
 
   // --- Filter State ---
   const [selectedUnit, setSelectedUnit] = useState<string>('');
@@ -74,7 +111,12 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   const parseCurrency = (value: string) => {
     if (!value) return 0;
-    return parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0;
+    try {
+        const clean = value.replace(/[^\d,-]/g, '').replace(',', '.');
+        return parseFloat(clean) || 0;
+    } catch {
+        return 0;
+    }
   };
 
   const parseDate = (dateStr: string) => {
@@ -94,26 +136,32 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   // --- Data Processing ---
   const availableUnits = useMemo(() => {
-    const units = new Set(data.map(d => d.ENTREGA).filter(Boolean));
+    // If searching globally, we look at ALL available units in the system
+    const sourceForUnits = globalSearch.trim().length > 0 ? processedData : data;
+    const units = new Set(sourceForUnits.map(d => d.ENTREGA).filter(Boolean));
     return Array.from(units).sort();
-  }, [data]);
+  }, [data, processedData, globalSearch]);
 
   const filteredData = useMemo(() => {
-    if (globalSearch.trim().length > 0) {
+    const isGlobalSearch = globalSearch.trim().length > 0;
+    
+    // CRITICAL FIX: If searching, use the FULL dataset (processedData), ignoring the tab's pre-filtered 'data' prop.
+    // This allows finding a "Critical" item even if inside the "Pendency" tab.
+    let result = isGlobalSearch ? processedData : data;
+
+    if (isGlobalSearch) {
       const term = globalSearch.toLowerCase();
-      return data.filter(d => 
+      result = result.filter(d => 
         d.CTE.toLowerCase().includes(term) ||
         d.DESTINATARIO.toLowerCase().includes(term) ||
         d.ENTREGA.toLowerCase().includes(term) ||
         d.SERIE.toLowerCase().includes(term)
       );
-    }
-
-    let result = data;
-
-    // Strict view filtering handled by App.tsx, but kept here for safety in case data prop isn't filtered
-    if (isPendencyView) {
-      result = result.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
+    } else {
+        // If NOT searching globally, apply strict view filtering (redundant if passed via props, but safe)
+        if (isPendencyView) {
+            result = result.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
+        }
     }
 
     const effectiveUnit = user?.linkedDestUnit || selectedUnit;
@@ -137,7 +185,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     }
 
     return result;
-  }, [data, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch]);
+  }, [data, processedData, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch]);
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData];
@@ -207,9 +255,10 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   // Counts for filters
   const getCount = (filterType: 'status' | 'payment' | 'note', key: string) => {
-      let base = data;
-      // Consistent filtering for counts
-      if (isPendencyView) {
+      // Logic for counts should follow the current view scope unless searching globally
+      let base = globalSearch.trim().length > 0 ? processedData : data;
+      
+      if (!globalSearch && isPendencyView) {
         base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
       }
       
@@ -247,35 +296,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         </div>
       </div>
     </th>
-  );
-
-  const FilterCard = ({ label, count, color, selected, onClick }: { label: string, count: number, color: string, selected: boolean, onClick: () => void }) => (
-    <div 
-        onClick={onClick}
-        className={clsx(
-            "rounded-lg p-2 border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:shadow-sm min-h-[60px]",
-            selected 
-                ? "bg-white ring-1 ring-inset" 
-                : "bg-gray-50 border-gray-200 hover:bg-white"
-        )}
-        style={{ 
-            borderColor: selected ? color : undefined, 
-            backgroundColor: selected ? `${color}08` : undefined
-        }}
-    >
-        {selected && (
-            <div className="absolute top-1 right-1">
-                <CheckCircle size={12} fill={color} className="text-white" />
-            </div>
-        )}
-        <span className="font-bold text-[10px] uppercase tracking-wider text-gray-500 truncate block pr-3" style={{ color: selected ? color : undefined }}>
-            {label}
-        </span>
-        <div className="mt-1">
-            <span className="text-lg font-bold text-gray-800 leading-none">{count}</span>
-        </div>
-        <div className="absolute bottom-0 left-0 h-0.5 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.3 }} />
-    </div>
   );
 
   return (
@@ -335,8 +355,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
             {/* Filter Grids */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {/* Status Cards - Hide in Critical View */}
-                {!isCriticalView && STATUS_OPTIONS.map(status => (
+                {/* Status Cards - Hide in Critical View (unless searching globally) */}
+                {(!isCriticalView || globalSearch) && STATUS_OPTIONS.map(status => (
                     <FilterCard 
                         key={status}
                         label={status}
