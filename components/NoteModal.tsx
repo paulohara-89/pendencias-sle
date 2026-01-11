@@ -61,6 +61,22 @@ const compressImage = (file: File): Promise<string> => {
     });
 };
 
+// Helper to parse DD/MM/YYYY HH:mm:ss for sorting
+const parseDateString = (dateStr: string) => {
+    if (!dateStr) return 0;
+    try {
+        const [d, t] = dateStr.split(' ');
+        const [day, month, year] = d.split('/').map(Number);
+        let hour = 0, min = 0, sec = 0;
+        if (t) {
+            [hour, min, sec] = t.split(':').map(Number);
+        }
+        return new Date(year, month - 1, day, hour, min, sec || 0).getTime();
+    } catch {
+        return 0;
+    }
+};
+
 // Subcomponent to handle individual image state and errors
 const NoteAttachment = ({ url, onPreview }: { url: string, onPreview: (url: string) => void }) => {
   const [hasError, setHasError] = useState(false);
@@ -154,8 +170,13 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
     p.CTE === liveCte.CTE && 
     normalizeSerie(p.SERIE || '') === normalizeSerie(liveCte.SERIE || '')
   );
+
+  // Sort history by date descending (Newest first) for safe display
+  const sortedProcessHistory = [...processHistory].sort((a, b) => {
+      return parseDateString(b.DATA) - parseDateString(a.DATA);
+  });
   
-  // Check backend resolution
+  // Check backend resolution using the raw history (last item usually)
   const lastProcess = processHistory.length > 0 ? processHistory[processHistory.length - 1] : null;
   const processResolved = lastProcess?.STATUS === 'RESOLVIDO' || lastProcess?.STATUS === 'LOCALIZADA';
 
@@ -402,7 +423,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
           </div>
 
           {/* Section: Status History */}
-          {processHistory.length > 0 && (
+          {sortedProcessHistory.length > 0 && (
             <div className="border-t border-gray-200 pt-4">
                 <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 mb-3">
                     <History size={14} /> Histórico de Alterações de Status
@@ -411,7 +432,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
                     {/* Vertical Line */}
                     <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gray-200"></div>
 
-                    {processHistory.slice().reverse().map((process, idx) => (
+                    {sortedProcessHistory.map((process, idx) => (
                         <div key={idx} className="relative pl-6 pb-4 last:pb-0">
                             {/* Dot */}
                             <div className={clsx(

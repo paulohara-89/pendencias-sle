@@ -53,6 +53,7 @@ const AppContent: React.FC = () => {
             // Fix: Pass SERIE to isCteEmBusca
             data={processedData.filter(d => isCteEmBusca(d.CTE, d.SERIE, d.STATUS))}
             onNoteClick={setSelectedCte}
+            enableFilters={true} // Enable filters to allow specific exports
           />
         );
       case Page.CONFIGURACOES:
