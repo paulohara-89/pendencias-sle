@@ -17,7 +17,7 @@
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.1",
     "xlsx": "^0.18.5",
-    "@google/genai": "^1.0.0",
+    "@google/genai": "*",
     "framer-motion": "^11.0.8"
   },
   "devDependencies": {

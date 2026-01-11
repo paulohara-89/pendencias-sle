@@ -286,7 +286,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
                                <span className="text-[9px] font-bold">Enviando...</span>
                            </div>
                        ) : (
-                           <CheckCircle2 size={12} className="text-green-500" title="Sincronizado" />
+                           <span title="Sincronizado"><CheckCircle2 size={12} className="text-green-500" /></span>
                        )}
                        
                        {isAuthor && !isPending && (

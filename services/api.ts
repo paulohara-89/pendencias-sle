@@ -9,7 +9,7 @@ const fetchCsv = async (url: string) => {
     Papa.parse(text, {
       header: false,
       complete: (results) => resolve(results.data as any[]),
-      error: (err) => reject(err)
+      error: (err: any) => reject(err)
     });
   });
 };
