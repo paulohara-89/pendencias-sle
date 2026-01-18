@@ -15,6 +15,7 @@ interface Props {
   isPendencyView?: boolean;
   isCriticalView?: boolean;
   enableFilters?: boolean; // New prop to force enable filters
+  ignoreUnitFilter?: boolean; // Forces table to ignore user's linked unit (for Global Views like Em Busca)
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -60,7 +61,7 @@ const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, 
   </div>
 );
 
-const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false }) => {
+const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false, ignoreUnitFilter = false }) => {
   const { user } = useAuth();
   const { notes, getLatestNote, processedData, isCteEmBusca } = useData();
 
@@ -164,7 +165,12 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         }
     }
 
-    const effectiveUnit = user?.linkedDestUnit || selectedUnit;
+    // Determine effective unit filter.
+    // If ignoreUnitFilter is true, we IGNORE the user's linkedDestUnit for forced filtering.
+    // This allows seeing items from other units in views like "Em Busca".
+    const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
+    const effectiveUnit = userRestrictedUnit || selectedUnit;
+    
     if (effectiveUnit) {
       result = result.filter(d => d.ENTREGA === effectiveUnit);
     }
@@ -185,7 +191,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     }
 
     return result;
-  }, [data, processedData, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch]);
+  }, [data, processedData, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch, ignoreUnitFilter]);
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData];
@@ -229,7 +235,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     // Export based on the CURRENTLY VISIBLE filtered list (sortedData)
     const exportData = sortedData.map(d => {
         const latestNote = getLatestNote(d.CTE);
-        const hasNotes = getNoteCount(d.CTE) > 0;
         
         return {
             CTE: d.CTE,
@@ -266,7 +271,9 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
       }
       
-      const effectiveUnit = user?.linkedDestUnit || selectedUnit;
+      // Apply unit filter logic for counts too
+      const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
+      const effectiveUnit = userRestrictedUnit || selectedUnit;
       if (effectiveUnit) base = base.filter(d => d.ENTREGA === effectiveUnit);
 
       if (filterType === 'status') return base.filter(d => d.STATUS_CALCULADO === key).length;
@@ -339,7 +346,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                 
                 {/* Unit Selector */}
                 <div className="w-full md:w-auto">
-                    {user?.linkedDestUnit ? (
+                    {user?.linkedDestUnit && !ignoreUnitFilter ? (
                         <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 cursor-not-allowed">
                             <Package size={14} />
                             <span className="font-bold text-xs">{user.linkedDestUnit}</span>
@@ -449,9 +456,12 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
               const rowHasNotes = noteCount > 0;
 
               // Check if item is "Em Busca" AND current user has NOT interacted
+              // LOGIC UPDATED: If I have a unit, I must interact with EM BUSCA items regardless of destination
               const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
               const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
-              const needsAttention = isEmBusca && !userHasInteracted;
+              
+              const userHasUnit = !!user?.linkedDestUnit;
+              const needsAttention = isEmBusca && !userHasInteracted && userHasUnit;
 
               return (
                 <tr 
@@ -542,7 +552,9 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
            
            const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
            const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
-           const needsAttention = isEmBusca && !userHasInteracted;
+           
+           const userHasUnit = !!user?.linkedDestUnit;
+           const needsAttention = isEmBusca && !userHasInteracted && userHasUnit;
 
            return (
             <div 

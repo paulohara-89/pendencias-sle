@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { DataProvider, useData } from './context/DataContext';
+import { DataProvider as GlobalDataProvider, useData } from './context/DataContext';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -29,7 +29,7 @@ const AppContent: React.FC = () => {
         return (
           <DataTable 
             title="Painel de Pendências" 
-            data={processedData.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO')} 
+            data={processedData.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS))} 
             onNoteClick={setSelectedCte}
             isPendencyView={true}
           />
@@ -38,22 +38,22 @@ const AppContent: React.FC = () => {
         return (
           <DataTable 
             title="Pendências Críticas" 
-            data={processedData.filter(d => d.STATUS_CALCULADO === 'CRÍTICO')} 
+            data={processedData.filter(d => d.STATUS_CALCULADO === 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS))} 
             onNoteClick={setSelectedCte}
-            enableFilters={true} // Enable global search, payment and note filters
-            isCriticalView={true} // Hide status cards
+            enableFilters={true}
+            isCriticalView={true}
           />
         );
       case Page.EM_BUSCA:
-        // Use the centralized helper to determine if it should be in "Em Busca"
-        // This checks the history (notes) for status updates
+        // Exibe mercadorias em busca (a filtragem de unidade é ignorada via ignoreUnitFilter para permitir visão global)
+        const emBuscaData = processedData.filter(d => isCteEmBusca(d.CTE, d.SERIE, d.STATUS));
         return (
            <DataTable 
             title="Mercadorias em Busca" 
-            // Fix: Pass SERIE to isCteEmBusca
-            data={processedData.filter(d => isCteEmBusca(d.CTE, d.SERIE, d.STATUS))}
+            data={emBuscaData}
             onNoteClick={setSelectedCte}
-            enableFilters={true} // Enable filters to allow specific exports
+            enableFilters={true}
+            ignoreUnitFilter={true}
           />
         );
       case Page.CONFIGURACOES:
@@ -71,7 +71,6 @@ const AppContent: React.FC = () => {
       <Sidebar currentPage={currentPage} setPage={setCurrentPage} logout={logout} />
       
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Increased padding-left (pl-20) for mobile to completely clear the fixed hamburger menu */}
         <header className="bg-white border-b h-16 flex items-center justify-between px-6 pl-20 md:px-6 shadow-sm z-10">
           <h2 className="font-semibold text-gray-700 uppercase tracking-wide truncate">
             {currentPage.replace('_', ' ')}
@@ -84,7 +83,6 @@ const AppContent: React.FC = () => {
           </div>
         </header>
 
-        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
            <div className="max-w-7xl mx-auto w-full">
              {renderPage()}
@@ -92,7 +90,6 @@ const AppContent: React.FC = () => {
         </div>
       </main>
 
-      {/* Modals */}
       {selectedCte && (
         <NoteModal cte={selectedCte} onClose={() => setSelectedCte(null)} />
       )}
@@ -103,9 +100,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <DataProvider>
+      <GlobalDataProvider>
         <AppContent />
-      </DataProvider>
+      </GlobalDataProvider>
     </AuthProvider>
   );
 };
