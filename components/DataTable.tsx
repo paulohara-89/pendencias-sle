@@ -29,17 +29,19 @@ interface FilterCardProps {
   count: number;
   color: string;
   selected: boolean;
+  dimmed?: boolean; // New prop for visual feedback
   onClick: () => void;
 }
 
-const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, onClick }) => (
+const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, dimmed, onClick }) => (
   <div 
       onClick={onClick}
       className={clsx(
           "rounded-lg p-2 border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:shadow-sm min-h-[60px]",
           selected 
-              ? "bg-white ring-1 ring-inset" 
-              : "bg-gray-50 border-gray-200 hover:bg-white"
+              ? "bg-white ring-1 ring-inset z-10 scale-[1.02]" 
+              : "bg-gray-50 border-gray-200 hover:bg-white",
+          dimmed && !selected ? "opacity-40 hover:opacity-80 scale-95 grayscale-[0.5]" : "opacity-100"
       )}
       style={{ 
           borderColor: selected ? color : undefined, 
@@ -262,23 +264,51 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     XLSX.writeFile(wb, `Relatorio_SLE_${title.replace(/\s/g, '_')}_${dateStr}.xlsx`);
   };
 
-  // Counts for filters
+  // Counts for filters (Corrected for Cross-Filtering)
   const getCount = (filterType: 'status' | 'payment' | 'note', key: string) => {
-      // Logic for counts should follow the current view scope unless searching globally
+      // Start with the base dataset appropriate for the current view
       let base = globalSearch.trim().length > 0 ? processedData : data;
       
+      // If NOT searching globally, respect the view's hard filter (e.g., exclude Criticals for Pendencies)
       if (!globalSearch && isPendencyView) {
         base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
       }
       
-      // Apply unit filter logic for counts too
+      // Apply Unit Filter
       const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
       const effectiveUnit = userRestrictedUnit || selectedUnit;
       if (effectiveUnit) base = base.filter(d => d.ENTREGA === effectiveUnit);
 
-      if (filterType === 'status') return base.filter(d => d.STATUS_CALCULADO === key).length;
-      if (filterType === 'payment') return base.filter(d => d.FRETE_PAGO === key).length;
+      // Apply Cross-Filters
+      if (filterType === 'status') {
+          // When counting Status, apply active Payment and Note filters
+          if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
+          if (noteFilter !== 'ALL') {
+              base = base.filter(d => {
+                  const count = getNoteCount(d.CTE);
+                  return noteFilter === 'WITH' ? count > 0 : count === 0;
+              });
+          }
+          return base.filter(d => d.STATUS_CALCULADO === key).length;
+      }
+      
+      if (filterType === 'payment') {
+          // When counting Payment, apply active Status and Note filters
+          if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
+          if (noteFilter !== 'ALL') {
+              base = base.filter(d => {
+                  const count = getNoteCount(d.CTE);
+                  return noteFilter === 'WITH' ? count > 0 : count === 0;
+              });
+          }
+          return base.filter(d => d.FRETE_PAGO === key).length;
+      }
+      
       if (filterType === 'note') {
+         // When counting Notes, apply active Status and Payment filters
+         if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
+         if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
+         
          return base.filter(d => {
              const count = getNoteCount(d.CTE);
              return key === 'WITH' ? count > 0 : count === 0;
@@ -374,6 +404,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                         count={getCount('status', status)}
                         color={STATUS_COLORS_MAP[status]}
                         selected={statusFilters.includes(status)}
+                        dimmed={statusFilters.length > 0}
                         onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
                     />
                 ))}
@@ -383,6 +414,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                     count={getCount('note', 'WITH')}
                     color={COLORS.priority} 
                     selected={noteFilter === 'WITH'}
+                    dimmed={noteFilter !== 'ALL'}
                     onClick={() => setNoteFilter(prev => prev === 'WITH' ? 'ALL' : 'WITH')}
                  />
                  <FilterCard 
@@ -390,6 +422,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                     count={getCount('note', 'WITHOUT')}
                     color="#6b7280" 
                     selected={noteFilter === 'WITHOUT'}
+                    dimmed={noteFilter !== 'ALL'}
                     onClick={() => setNoteFilter(prev => prev === 'WITHOUT' ? 'ALL' : 'WITHOUT')}
                  />
             </div>
@@ -400,10 +433,11 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                         key={pay}
                         onClick={() => setPaymentFilters(prev => toggleFilter(prev, pay))}
                         className={clsx(
-                            "flex items-center justify-between px-3 py-1.5 rounded-lg border cursor-pointer transition-colors",
+                            "flex items-center justify-between px-3 py-1.5 rounded-lg border cursor-pointer transition-all select-none",
                             paymentFilters.includes(pay) 
-                              ? "bg-white shadow-sm ring-1 ring-inset" 
-                              : "bg-gray-50 border-gray-100 hover:bg-gray-100"
+                              ? "bg-white shadow-sm ring-1 ring-inset scale-[1.02]" 
+                              : "bg-gray-50 border-gray-100 hover:bg-gray-100",
+                            paymentFilters.length > 0 && !paymentFilters.includes(pay) ? "opacity-50 grayscale" : "opacity-100"
                         )}
                         style={{ borderColor: paymentFilters.includes(pay) ? PAYMENT_COLORS_MAP[pay] : undefined }}
                     >

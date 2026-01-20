@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, CartesianGrid 
 } from 'recharts';
-import { Filter, DollarSign, Package, AlertCircle, CheckCircle, PieChart as PieChartIcon, BarChart3, TrendingUp, X, ArrowLeftCircle } from 'lucide-react';
+import { Filter, DollarSign, Package, AlertCircle, CheckCircle, PieChart as PieChartIcon, BarChart3, TrendingUp, X, ArrowLeftCircle, CalendarCheck2 } from 'lucide-react';
 import clsx from 'clsx';
 import { COLORS } from '../constants';
 
@@ -62,9 +62,36 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const parseDate = (dateStr: string) => {
+    if (!dateStr) return 0;
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+    return 0;
+  };
+
   // --- Data Processing ---
   const isUserUnitBound = !!user?.linkedDestUnit;
   const activeUnit = isUserUnitBound ? user.linkedDestUnit : selectedUnit;
+
+  // Calculate Latest Date from ALL processed data
+  const latestDate = useMemo(() => {
+    if (processedData.length === 0) return '';
+    
+    let maxTime = 0;
+    let maxDateStr = '';
+
+    processedData.forEach(d => {
+       const t = parseDate(d.DATA_EMISSAO);
+       if (t > maxTime) {
+           maxTime = t;
+           maxDateStr = d.DATA_EMISSAO;
+       }
+    });
+    
+    return maxDateStr || new Date().toLocaleDateString('pt-BR');
+  }, [processedData]);
 
   const availableUnits = useMemo(() => {
     const units = new Set(processedData.map(d => d.ENTREGA).filter(Boolean));
@@ -78,6 +105,7 @@ const Dashboard: React.FC = () => {
     });
   }, [processedData, activeUnit]);
 
+  // Data for Status Cards (Filters by Payment only)
   const statusCardsData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (paymentFilters.length > 0 && !paymentFilters.includes(item.FRETE_PAGO || 'OUTROS')) return false;
@@ -85,6 +113,7 @@ const Dashboard: React.FC = () => {
     });
   }, [baseScopeData, paymentFilters]);
 
+  // Data for Payment Cards (Filters by Status only)
   const paymentCardsData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (statusFilters.length > 0) {
@@ -95,6 +124,7 @@ const Dashboard: React.FC = () => {
     });
   }, [baseScopeData, statusFilters]);
 
+  // Data for Charts and Totals (Filters by EVERYTHING)
   const fullyFilteredData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (paymentFilters.length > 0 && !paymentFilters.includes(item.FRETE_PAGO || 'OUTROS')) return false;
@@ -213,14 +243,15 @@ const Dashboard: React.FC = () => {
       }
   };
 
-  const FilterCard = ({ label, qty, val, color, selected, onClick }: any) => (
+  const FilterCard = ({ label, qty, val, color, selected, dimmed, onClick }: any) => (
     <div 
       onClick={onClick}
       className={clsx(
         "rounded-xl p-2.5 border transition-all cursor-pointer flex flex-col justify-between h-full relative overflow-hidden group hover:shadow-md",
         selected 
-          ? "bg-white ring-2 ring-offset-1" 
-          : "bg-white border-gray-200 opacity-90 hover:opacity-100"
+          ? "bg-white ring-2 ring-offset-1 z-10 scale-[1.02]" 
+          : "bg-white border-gray-200",
+        dimmed && !selected ? "opacity-40 hover:opacity-80 scale-95 grayscale-[0.5]" : "opacity-100"
       )}
       style={{ 
         borderColor: selected ? color : undefined, 
@@ -277,7 +308,15 @@ const Dashboard: React.FC = () => {
              </div>
         </div>
 
-        <div className="w-full lg:w-auto flex flex-col md:flex-row gap-2">
+        <div className="w-full lg:w-auto flex flex-col md:flex-row gap-2 items-center">
+            
+            {/* New Update Badge */}
+            <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 text-emerald-700 text-xs font-bold animate-in fade-in w-full md:w-auto justify-center md:justify-start">
+               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+               <CalendarCheck2 size={14} className="shrink-0" />
+               <span>Atualizado até {latestDate}</span>
+            </div>
+
             {(statusFilters.length > 0 || paymentFilters.length > 0) && (
                 <button 
                     onClick={() => { setStatusFilters([]); setPaymentFilters([]); }}
@@ -328,33 +367,37 @@ const Dashboard: React.FC = () => {
          </div>
 
          <div className="xl:col-span-10 flex flex-col gap-2">
+            {/* Status Cards */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50 flex-1">
                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 h-full">
                     {['FORA DO PRAZO', 'CRÍTICO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'].map(status => (
                         <FilterCard 
-                        key={status}
-                        label={status}
-                        qty={statusAgg[status]?.qty || 0}
-                        val={statusAgg[status]?.val || 0}
-                        color={STATUS_COLORS[status]}
-                        selected={statusFilters.includes(status)}
-                        onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
+                            key={status}
+                            label={status}
+                            qty={statusAgg[status]?.qty || 0}
+                            val={statusAgg[status]?.val || 0}
+                            color={STATUS_COLORS[status]}
+                            selected={statusFilters.includes(status)}
+                            dimmed={statusFilters.length > 0}
+                            onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
                         />
                     ))}
                  </div>
             </div>
             
+            {/* Payment Cards */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50">
                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full">
                     {Object.keys(PAYMENT_COLORS).map(type => (
                         <FilterCard 
-                        key={type}
-                        label={type.replace('_', ' ')}
-                        qty={paymentAgg[type]?.qty || 0}
-                        val={paymentAgg[type]?.val || 0}
-                        color={PAYMENT_COLORS[type]}
-                        selected={paymentFilters.includes(type)}
-                        onClick={() => setPaymentFilters(prev => toggleFilter(prev, type))}
+                            key={type}
+                            label={type.replace('_', ' ')}
+                            qty={paymentAgg[type]?.qty || 0}
+                            val={paymentAgg[type]?.val || 0}
+                            color={PAYMENT_COLORS[type]}
+                            selected={paymentFilters.includes(type)}
+                            dimmed={paymentFilters.length > 0}
+                            onClick={() => setPaymentFilters(prev => toggleFilter(prev, type))}
                         />
                     ))}
                  </div>
