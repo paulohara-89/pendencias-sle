@@ -10,7 +10,7 @@ import clsx from 'clsx';
 import { COLORS } from '../constants';
 
 const Dashboard: React.FC = () => {
-  const { processedData } = useData();
+  const { processedData, baseData } = useData();
   const { user } = useAuth();
   
   // State for Filters
@@ -54,7 +54,6 @@ const Dashboard: React.FC = () => {
   const safeParseValue = (valStr: string | undefined | null) => {
     if (!valStr) return 0;
     try {
-      // Remove R$, spaces and other non-numeric chars except comma and minus
       const clean = valStr.replace(/[^\d,-]/g, '').replace(',', '.');
       return parseFloat(clean) || 0;
     } catch (e) {
@@ -62,11 +61,11 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const parseDate = (dateStr: string) => {
-    if (!dateStr) return 0;
+  const parseDateToComparable = (dateStr: string) => {
+    if (!dateStr || typeof dateStr !== 'string') return 0;
     const parts = dateStr.split('/');
     if (parts.length === 3) {
-      return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+      return parseInt(parts[2] + parts[1].padStart(2, '0') + parts[0].padStart(2, '0'));
     }
     return 0;
   };
@@ -75,23 +74,19 @@ const Dashboard: React.FC = () => {
   const isUserUnitBound = !!user?.linkedDestUnit;
   const activeUnit = isUserUnitBound ? user.linkedDestUnit : selectedUnit;
 
-  // Calculate Latest Date from ALL processed data
-  const latestDate = useMemo(() => {
-    if (processedData.length === 0) return '';
-    
-    let maxTime = 0;
-    let maxDateStr = '';
-
-    processedData.forEach(d => {
-       const t = parseDate(d.DATA_EMISSAO);
-       if (t > maxTime) {
-           maxTime = t;
-           maxDateStr = d.DATA_EMISSAO;
+  const latestEmissaoDate = useMemo(() => {
+    if (baseData.length === 0) return '--/--/----';
+    let maxVal = 0;
+    let maxStr = '';
+    baseData.forEach(d => {
+       const currentVal = parseDateToComparable(d.DATA_EMISSAO);
+       if (currentVal > maxVal) {
+           maxVal = currentVal;
+           maxStr = d.DATA_EMISSAO;
        }
     });
-    
-    return maxDateStr || new Date().toLocaleDateString('pt-BR');
-  }, [processedData]);
+    return maxStr || '--/--/----';
+  }, [baseData]);
 
   const availableUnits = useMemo(() => {
     const units = new Set(processedData.map(d => d.ENTREGA).filter(Boolean));
@@ -105,7 +100,6 @@ const Dashboard: React.FC = () => {
     });
   }, [processedData, activeUnit]);
 
-  // Data for Status Cards (Filters by Payment only)
   const statusCardsData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (paymentFilters.length > 0 && !paymentFilters.includes(item.FRETE_PAGO || 'OUTROS')) return false;
@@ -113,7 +107,6 @@ const Dashboard: React.FC = () => {
     });
   }, [baseScopeData, paymentFilters]);
 
-  // Data for Payment Cards (Filters by Status only)
   const paymentCardsData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (statusFilters.length > 0) {
@@ -124,7 +117,6 @@ const Dashboard: React.FC = () => {
     });
   }, [baseScopeData, statusFilters]);
 
-  // Data for Charts and Totals (Filters by EVERYTHING)
   const fullyFilteredData = useMemo(() => {
     return baseScopeData.filter(item => {
       if (paymentFilters.length > 0 && !paymentFilters.includes(item.FRETE_PAGO || 'OUTROS')) return false;
@@ -226,21 +218,49 @@ const Dashboard: React.FC = () => {
 
   const handleBarClick = (data: any) => {
       if (activeUnit) return; 
-
       let targetFullName = '';
       if (data && data.fullName) {
         targetFullName = data.fullName;
-      } 
-      else if (data && (typeof data === 'string' || data.value)) {
+      } else if (data && (typeof data === 'string' || data.value)) {
         const val = typeof data === 'string' ? data : data.value;
         const found = chartData.barData.find((d: any) => d.name === val);
         if (found) targetFullName = found.fullName;
       }
-
       if (targetFullName) {
           const match = availableUnits.find(u => u === targetFullName || cleanLabel(u) === cleanLabel(targetFullName));
           if (match) setSelectedUnit(match);
       }
+  };
+
+  // Custom Tooltip for Bar Chart to hide zero values
+  const CustomBarTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      // Filter out payloads with zero value
+      const visibleData = payload.filter((p: any) => p.value > 0);
+      if (visibleData.length === 0) return null;
+
+      const fullName = payload[0]?.payload?.fullName || label;
+
+      return (
+        <div className="bg-white p-3 border border-gray-100 shadow-xl rounded-lg z-50">
+          <p className="text-sm font-bold text-gray-800 mb-2 border-b pb-1">{fullName}</p>
+          <div className="space-y-1">
+            {visibleData.map((p: any, idx: number) => (
+              <div key={idx} className="flex justify-between items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />
+                  <span className="text-[11px] font-bold text-gray-500 uppercase">{p.name}:</span>
+                </div>
+                <span className="text-xs font-mono font-black text-gray-700">
+                  {viewMode === 'value' ? formatCurrency(p.value) : formatNumber(p.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
   };
 
   const FilterCard = ({ label, qty, val, color, selected, dimmed, onClick }: any) => (
@@ -309,12 +329,10 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="w-full lg:w-auto flex flex-col md:flex-row gap-2 items-center">
-            
-            {/* New Update Badge */}
             <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 text-emerald-700 text-xs font-bold animate-in fade-in w-full md:w-auto justify-center md:justify-start">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                <CalendarCheck2 size={14} className="shrink-0" />
-               <span>Atualizado até {latestDate}</span>
+               <span>Atualizado até {latestEmissaoDate}</span>
             </div>
 
             {(statusFilters.length > 0 || paymentFilters.length > 0) && (
@@ -367,7 +385,6 @@ const Dashboard: React.FC = () => {
          </div>
 
          <div className="xl:col-span-10 flex flex-col gap-2">
-            {/* Status Cards */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50 flex-1">
                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 h-full">
                     {['FORA DO PRAZO', 'CRÍTICO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'].map(status => (
@@ -385,7 +402,6 @@ const Dashboard: React.FC = () => {
                  </div>
             </div>
             
-            {/* Payment Cards */}
             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-200/50">
                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 h-full">
                     {Object.keys(PAYMENT_COLORS).map(type => (
@@ -466,15 +482,7 @@ const Dashboard: React.FC = () => {
                    onClick={handleBarClick}
                    style={{ cursor: !activeUnit ? 'pointer' : 'default' }}
                  />
-                 <Tooltip 
-                   formatter={(value: number) => viewMode === 'value' ? formatCurrency(value) : value}
-                   labelFormatter={(label, payload) => {
-                     if (payload && payload.length > 0) return payload[0].payload.fullName || label;
-                     return label;
-                   }}
-                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', padding: '8px', fontSize: '12px' }}
-                   cursor={{fill: 'rgba(0,0,0,0.05)'}}
-                 />
+                 <Tooltip content={<CustomBarTooltip />} cursor={{fill: 'rgba(0,0,0,0.05)'}} />
                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }} />
                  {Object.keys(PAYMENT_COLORS).map(key => (
                    <Bar 

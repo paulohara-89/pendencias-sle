@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CteData } from '../types';
 import StatusBadge from './StatusBadge';
-import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle, CalendarCheck2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -65,7 +65,7 @@ const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, 
 
 const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false, ignoreUnitFilter = false }) => {
   const { user } = useAuth();
-  const { notes, getLatestNote, processedData, isCteEmBusca } = useData();
+  const { notes, getLatestNote, processedData, baseData, isCteEmBusca } = useData();
 
   // --- Filter State ---
   const [selectedUnit, setSelectedUnit] = useState<string>('');
@@ -79,12 +79,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   // --- Constants ---
   const STATUS_OPTIONS = useMemo(() => {
-    if (isPendencyView) {
-        return ['FORA DO PRAZO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'];
-    }
-    if (isCriticalView) {
-        return ['CRÍTICO'];
-    }
+    if (isPendencyView) return ['FORA DO PRAZO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'];
+    if (isCriticalView) return ['CRÍTICO'];
     return ['CRÍTICO', 'FORA DO PRAZO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'];
   }, [isPendencyView, isCriticalView]);
 
@@ -105,6 +101,22 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     'FATURAR_DEST': '#f97316'
   };
 
+  // Encontra a data mais recente baseada na coluna DATA EMISSAO
+  const latestEmissaoDate = useMemo(() => {
+    if (baseData.length === 0) return '--/--/----';
+    let maxVal = 0;
+    let maxStr = '';
+    baseData.forEach(d => {
+       if (!d.DATA_EMISSAO) return;
+       const parts = d.DATA_EMISSAO.split('/');
+       if (parts.length === 3) {
+           const val = parseInt(parts[2] + parts[1].padStart(2, '0') + parts[0].padStart(2, '0'));
+           if (val > maxVal) { maxVal = val; maxStr = d.DATA_EMISSAO; }
+       }
+    });
+    return maxStr || '--/--/----';
+  }, [baseData]);
+
   // --- Helpers ---
   const toggleFilter = (list: string[], item: string) => {
     return list.includes(item) ? list.filter(i => i !== item) : [...list, item];
@@ -117,9 +129,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     try {
         const clean = value.replace(/[^\d,-]/g, '').replace(',', '.');
         return parseFloat(clean) || 0;
-    } catch {
-        return 0;
-    }
+    } catch { return 0; }
   };
 
   const parseDate = (dateStr: string) => {
@@ -129,17 +139,15 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     return parseInt(`${parts[2]}${parts[1]}${parts[0]}`);
   };
 
-  // --- Sorting Handler ---
-  const handleSort = (key: SortConfig['key']) => {
+  const handleSort = (sortKey: SortConfig['key']) => {
     setSortConfig(current => ({
-      key,
-      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+      key: sortKey,
+      direction: current.key === sortKey && current.direction === 'asc' ? 'desc' : 'asc',
     }));
   };
 
   // --- Data Processing ---
   const availableUnits = useMemo(() => {
-    // If searching globally, we look at ALL available units in the system
     const sourceForUnits = globalSearch.trim().length > 0 ? processedData : data;
     const units = new Set(sourceForUnits.map(d => d.ENTREGA).filter(Boolean));
     return Array.from(units).sort();
@@ -147,9 +155,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   const filteredData = useMemo(() => {
     const isGlobalSearch = globalSearch.trim().length > 0;
-    
-    // CRITICAL FIX: If searching, use the FULL dataset (processedData), ignoring the tab's pre-filtered 'data' prop.
-    // This allows finding a "Critical" item even if inside the "Pendency" tab.
     let result = isGlobalSearch ? processedData : data;
 
     if (isGlobalSearch) {
@@ -161,37 +166,21 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         d.SERIE.toLowerCase().includes(term)
       );
     } else {
-        // If NOT searching globally, apply strict view filtering (redundant if passed via props, but safe)
-        if (isPendencyView) {
-            result = result.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
-        }
+        if (isPendencyView) result = result.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
     }
 
-    // Determine effective unit filter.
-    // If ignoreUnitFilter is true, we IGNORE the user's linkedDestUnit for forced filtering.
-    // This allows seeing items from other units in views like "Em Busca".
     const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
     const effectiveUnit = userRestrictedUnit || selectedUnit;
-    
-    if (effectiveUnit) {
-      result = result.filter(d => d.ENTREGA === effectiveUnit);
-    }
+    if (effectiveUnit) result = result.filter(d => d.ENTREGA === effectiveUnit);
 
-    if (statusFilters.length > 0) {
-      result = result.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
-    }
-
-    if (paymentFilters.length > 0) {
-      result = result.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
-    }
-
+    if (statusFilters.length > 0) result = result.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
+    if (paymentFilters.length > 0) result = result.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
     if (noteFilter !== 'ALL') {
       result = result.filter(d => {
         const count = getNoteCount(d.CTE);
         return noteFilter === 'WITH' ? count > 0 : count === 0;
       });
     }
-
     return result;
   }, [data, processedData, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch, ignoreUnitFilter]);
 
@@ -200,7 +189,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     sorted.sort((a, b) => {
       let valA: any = '';
       let valB: any = '';
-
       switch (sortConfig.key) {
         case 'VALOR_NUMBER':
           valA = parseCurrency(a.VALOR_CTE);
@@ -219,12 +207,9 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
           valB = b.STATUS_CALCULADO || b.STATUS || '';
           break;
         default:
-          // @ts-ignore
-          valA = a[sortConfig.key] || '';
-          // @ts-ignore
-          valB = b[sortConfig.key] || '';
+          valA = (a as any)[sortConfig.key] || '';
+          valB = (b as any)[sortConfig.key] || '';
       }
-
       if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
       if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
@@ -232,56 +217,17 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     return sorted;
   }, [filteredData, sortConfig]);
 
-  // --- Export ---
-  const handleExport = () => {
-    // Export based on the CURRENTLY VISIBLE filtered list (sortedData)
-    const exportData = sortedData.map(d => {
-        const latestNote = getLatestNote(d.CTE);
-        
-        return {
-            CTE: d.CTE,
-            SERIE: d.SERIE,
-            CODIGO: d.CODIGO,
-            DATA_EMISSAO: d.DATA_EMISSAO,
-            DATA_LIMITE: d.DATA_LIMITE_BAIXA,
-            STATUS_ATUAL: d.STATUS_CALCULADO || d.STATUS,
-            UNIDADE_DESTINO: d.ENTREGA,
-            CLIENTE: d.DESTINATARIO,
-            VALOR: d.VALOR_CTE,
-            QTD_NOTAS: getNoteCount(d.CTE),
-            ULTIMA_NOTA_TEXTO: latestNote ? latestNote.TEXTO : '',
-            ULTIMA_NOTA_USUARIO: latestNote ? latestNote.USUARIO : '',
-            ULTIMA_NOTA_DATA: latestNote ? latestNote.DATA : '',
-            // Inclui link da imagem se existir na última nota
-            LINK_IMAGEM: latestNote?.LINK_IMAGEM || ''
-        };
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Dados_Filtrados");
-    const dateStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `Relatorio_SLE_${title.replace(/\s/g, '_')}_${dateStr}.xlsx`);
-  };
-
-  // Counts for filters (Corrected for Cross-Filtering)
+  // Counts for filters (Corrected for Dynamic Cross-Filtering)
   const getCount = (filterType: 'status' | 'payment' | 'note', key: string) => {
-      // Start with the base dataset appropriate for the current view
       let base = globalSearch.trim().length > 0 ? processedData : data;
+      if (!globalSearch && isPendencyView) base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
       
-      // If NOT searching globally, respect the view's hard filter (e.g., exclude Criticals for Pendencies)
-      if (!globalSearch && isPendencyView) {
-        base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
-      }
-      
-      // Apply Unit Filter
       const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
       const effectiveUnit = userRestrictedUnit || selectedUnit;
       if (effectiveUnit) base = base.filter(d => d.ENTREGA === effectiveUnit);
 
-      // Apply Cross-Filters
+      // Aplicar filtros das OUTRAS categorias (Cross-Filtering)
       if (filterType === 'status') {
-          // When counting Status, apply active Payment and Note filters
           if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
           if (noteFilter !== 'ALL') {
               base = base.filter(d => {
@@ -293,7 +239,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       }
       
       if (filterType === 'payment') {
-          // When counting Payment, apply active Status and Note filters
           if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
           if (noteFilter !== 'ALL') {
               base = base.filter(d => {
@@ -305,10 +250,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       }
       
       if (filterType === 'note') {
-         // When counting Notes, apply active Status and Payment filters
          if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
          if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
-         
          return base.filter(d => {
              const count = getNoteCount(d.CTE);
              return key === 'WITH' ? count > 0 : count === 0;
@@ -319,21 +262,14 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   const showFilters = isPendencyView || enableFilters;
 
-  // --- Internal Components (defined here to access state/handlers) ---
-  
   const SortHeader = ({ label, sortKey }: { label: string, sortKey: SortConfig['key'] }) => (
-    <th 
-      className="px-4 py-3 cursor-pointer group hover:bg-gray-100 transition-colors select-none"
-      onClick={() => handleSort(sortKey)}
-    >
+    <th className="px-4 py-3 cursor-pointer group hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort(sortKey)}>
       <div className="flex items-center gap-1">
         {label}
         <div className="text-gray-400 group-hover:text-primary-600">
            {sortConfig.key === sortKey ? (
                sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-           ) : (
-               <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-50" />
-           )}
+           ) : ( <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-50" /> )}
         </div>
       </div>
     </th>
@@ -342,51 +278,44 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
       
-      {/* --- Global Search Section --- */}
-      <div className="relative">
-         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="text-gray-400" size={20} />
-         </div>
-         <input 
-            type="text"
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Busca Global (CTE, Destinatário, Unidade)..."
-            className={clsx(
-                "w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 focus:ring-primary-500 outline-none transition-all shadow-sm text-gray-900",
-                globalSearch ? "bg-primary-50 border-primary-300 ring-2 ring-primary-100" : "bg-white border-gray-200"
-            )}
-         />
-         {globalSearch && (
-            <div className="absolute right-3 top-3 text-xs text-primary-600 font-bold animate-pulse">
-                Buscando em toda a base...
-            </div>
-         )}
+      {/* Search & Update Bar */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1">
+           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="text-gray-400" size={20} />
+           </div>
+           <input 
+              type="text"
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              placeholder="Busca Global (CTE, Destinatário, Unidade)..."
+              className={clsx(
+                  "w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 focus:ring-primary-500 outline-none transition-all shadow-sm text-gray-900",
+                  globalSearch ? "bg-primary-50 border-primary-300 ring-2 ring-primary-100" : "bg-white border-gray-200"
+              )}
+           />
+        </div>
+        <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-100 text-emerald-700 text-xs font-bold shadow-sm h-fit self-center">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <CalendarCheck2 size={16} />
+            <span>Atualizado até {latestEmissaoDate}</span>
+        </div>
       </div>
 
-      {/* --- Filter Section --- */}
+      {/* Filter Section */}
       {showFilters && (
         <div className={clsx("space-y-3 bg-white p-4 rounded-xl shadow-sm border border-gray-200 transition-opacity", globalSearch ? "opacity-50 pointer-events-none grayscale" : "opacity-100")}>
-            {/* Header / Unit Selector */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Filter size={18} className="text-primary-600" />
-                    Filtros
+                    <Filter size={18} className="text-primary-600" /> Filtros
                 </h2>
-                
-                {/* Unit Selector */}
                 <div className="w-full md:w-auto">
                     {user?.linkedDestUnit && !ignoreUnitFilter ? (
                         <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 cursor-not-allowed">
-                            <Package size={14} />
-                            <span className="font-bold text-xs">{user.linkedDestUnit}</span>
+                            <Package size={14} /> <span className="font-bold text-xs">{user.linkedDestUnit}</span>
                         </div>
                     ) : (
-                        <select 
-                            value={selectedUnit}
-                            onChange={(e) => setSelectedUnit(e.target.value)}
-                            className="w-full md:w-64 appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
-                        >
+                        <select value={selectedUnit} onChange={(e) => setSelectedUnit(e.target.value)} className="w-full md:w-64 appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer">
                             <option value="">Todas as Unidades</option>
                             {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -394,10 +323,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                 </div>
             </div>
 
-            {/* Filter Grids */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {/* Status Cards - Hide in Critical View (unless searching globally) */}
-                {(!isCriticalView || globalSearch) && STATUS_OPTIONS.map(status => (
+                {STATUS_OPTIONS.map(status => (
                     <FilterCard 
                         key={status}
                         label={status}
@@ -408,21 +335,14 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                         onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
                     />
                 ))}
-
                  <FilterCard 
-                    label="Com Anotações"
-                    count={getCount('note', 'WITH')}
-                    color={COLORS.priority} 
-                    selected={noteFilter === 'WITH'}
-                    dimmed={noteFilter !== 'ALL'}
+                    label="Com Notas" count={getCount('note', 'WITH')} color={COLORS.priority} 
+                    selected={noteFilter === 'WITH'} dimmed={noteFilter !== 'ALL'}
                     onClick={() => setNoteFilter(prev => prev === 'WITH' ? 'ALL' : 'WITH')}
                  />
                  <FilterCard 
-                    label="Sem Anotações"
-                    count={getCount('note', 'WITHOUT')}
-                    color="#6b7280" 
-                    selected={noteFilter === 'WITHOUT'}
-                    dimmed={noteFilter !== 'ALL'}
+                    label="Sem Notas" count={getCount('note', 'WITHOUT')} color="#6b7280" 
+                    selected={noteFilter === 'WITHOUT'} dimmed={noteFilter !== 'ALL'}
                     onClick={() => setNoteFilter(prev => prev === 'WITHOUT' ? 'ALL' : 'WITHOUT')}
                  />
             </div>
@@ -430,14 +350,11 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
                 {PAYMENT_OPTIONS.map(pay => (
                     <div 
-                        key={pay}
-                        onClick={() => setPaymentFilters(prev => toggleFilter(prev, pay))}
+                        key={pay} onClick={() => setPaymentFilters(prev => toggleFilter(prev, pay))}
                         className={clsx(
                             "flex items-center justify-between px-3 py-1.5 rounded-lg border cursor-pointer transition-all select-none",
-                            paymentFilters.includes(pay) 
-                              ? "bg-white shadow-sm ring-1 ring-inset scale-[1.02]" 
-                              : "bg-gray-50 border-gray-100 hover:bg-gray-100",
-                            paymentFilters.length > 0 && !paymentFilters.includes(pay) ? "opacity-50 grayscale" : "opacity-100"
+                            paymentFilters.includes(pay) ? "bg-white shadow-sm ring-1 ring-inset scale-[1.02]" : "bg-gray-50 border-gray-100 hover:bg-gray-100",
+                            paymentFilters.length > 0 && !paymentFilters.includes(pay) ? "opacity-40 grayscale" : "opacity-100"
                         )}
                         style={{ borderColor: paymentFilters.includes(pay) ? PAYMENT_COLORS_MAP[pay] : undefined }}
                     >
@@ -451,24 +368,27 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
              </div>
              
              {(statusFilters.length > 0 || paymentFilters.length > 0 || noteFilter !== 'ALL') && (
-                 <button 
-                    onClick={() => { setStatusFilters([]); setPaymentFilters([]); setNoteFilter('ALL'); }}
-                    className="w-full py-1.5 text-xs text-red-500 font-bold hover:bg-red-50 rounded transition-colors flex items-center justify-center gap-1"
-                 >
+                 <button onClick={() => { setStatusFilters([]); setPaymentFilters([]); setNoteFilter('ALL'); }} className="w-full py-1.5 text-xs text-red-500 font-bold hover:bg-red-50 rounded transition-colors flex items-center justify-center gap-1">
                     <X size={12} /> Limpar Filtros
                  </button>
              )}
         </div>
       )}
 
+      {/* Main Table Title & Action */}
       <div className="flex justify-between items-center mb-4 mt-6">
         <h2 className="text-xl font-bold text-primary-900">{title} <span className="text-gray-400 text-sm font-normal">({filteredData.length})</span></h2>
-        <button 
-          onClick={handleExport}
-          className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 text-sm font-medium shadow-sm flex items-center gap-2 transition-colors"
-        >
-          <FileSpreadsheet size={18} />
-          Exportar Excel
+        <button onClick={() => {
+            const exportData = sortedData.map(d => ({
+                CTE: d.CTE, SERIE: d.SERIE, DATA_EMISSAO: d.DATA_EMISSAO, DATA_LIMITE: d.DATA_LIMITE_BAIXA,
+                STATUS: d.STATUS_CALCULADO || d.STATUS, UNIDADE: d.ENTREGA, CLIENTE: d.DESTINATARIO, VALOR: d.VALOR_CTE
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Dados");
+            XLSX.writeFile(wb, `SLE_${title.replace(/\s/g, '_')}.xlsx`);
+        }} className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
+          <FileSpreadsheet size={18} /> Exportar Excel
         </button>
       </div>
 
@@ -487,42 +407,17 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
           <tbody className="divide-y divide-gray-100">
             {sortedData.map((row, idx) => {
               const noteCount = getNoteCount(row.CTE);
-              const rowHasNotes = noteCount > 0;
-
-              // Check if item is "Em Busca" AND current user has NOT interacted
-              // LOGIC UPDATED: If I have a unit, I must interact with EM BUSCA items regardless of destination
               const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
               const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
-              
-              const userHasUnit = !!user?.linkedDestUnit;
-              const needsAttention = isEmBusca && !userHasInteracted && userHasUnit;
+              const needsAttention = isEmBusca && !userHasInteracted && !!user?.linkedDestUnit;
 
               return (
-                <tr 
-                    key={`${row.CTE}-${idx}`} 
-                    className={clsx(
-                        "transition-colors",
-                        needsAttention 
-                            ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500 animate-[pulse_3s_ease-in-out_infinite]" 
-                            : "hover:bg-gray-50"
-                    )}
-                >
+                <tr key={`${row.CTE}-${idx}`} className={clsx("transition-colors", needsAttention ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500 animate-[pulse_3s_ease-in-out_infinite]" : "hover:bg-gray-50")}>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
-                      {/* Prominent Label for Attention */}
-                      {needsAttention && (
-                          <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded animate-bounce">
-                             <AlertTriangle size={10} /> ATENÇÃO
-                          </span>
-                      )}
-                      <StatusBadge 
-                          status={row.STATUS_CALCULADO || row.STATUS} 
-                          onClick={() => showFilters && row.STATUS_CALCULADO && setStatusFilters(prev => toggleFilter(prev, row.STATUS_CALCULADO!))}
-                      />
-                      <StatusBadge 
-                          status={row.FRETE_PAGO} 
-                          onClick={() => showFilters && setPaymentFilters(prev => toggleFilter(prev, row.FRETE_PAGO))}
-                      />
+                      {needsAttention && <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded animate-bounce"><AlertTriangle size={10} /> ATENÇÃO</span>}
+                      <StatusBadge status={row.STATUS_CALCULADO || row.STATUS} />
+                      <StatusBadge status={row.FRETE_PAGO} />
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -530,44 +425,17 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                     <div className="text-xs text-gray-500">Série: {row.SERIE}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={clsx(
-                      "font-bold",
-                      row.STATUS_CALCULADO === 'FORA DO PRAZO' ? 'text-red-600' : 'text-gray-700'
-                    )}>
-                      {row.DATA_LIMITE_BAIXA}
-                    </span>
+                    <span className={clsx("font-bold", row.STATUS_CALCULADO === 'FORA DO PRAZO' ? 'text-red-600' : 'text-gray-700')}>{row.DATA_LIMITE_BAIXA}</span>
                   </td>
                   <td className="px-4 py-3 truncate max-w-xs">
-                    <div className="truncate text-xs text-primary-600 font-bold uppercase mb-0.5" title={row.ENTREGA}>
-                        {row.ENTREGA}
-                    </div>
-                    <div className="truncate font-medium text-gray-800" title={row.DESTINATARIO}>
-                        {row.DESTINATARIO}
-                    </div>
+                    <div className="truncate text-xs text-primary-600 font-bold uppercase mb-0.5">{row.ENTREGA}</div>
+                    <div className="truncate font-medium text-gray-800">{row.DESTINATARIO}</div>
                   </td>
-                  <td className="px-4 py-3 font-mono font-bold text-gray-700">
-                    {row.VALOR_CTE}
-                  </td>
+                  <td className="px-4 py-3 font-mono font-bold text-gray-700">{row.VALOR_CTE}</td>
                   <td className="px-4 py-3">
-                    <button 
-                      onClick={() => onNoteClick(row)}
-                      className={clsx(
-                        "p-2 rounded-full relative transition-all group",
-                        needsAttention ? "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/30" :
-                        rowHasNotes 
-                          ? "text-orange-500 bg-orange-50 hover:bg-orange-100" 
-                          : "text-gray-400 hover:text-primary-600 hover:bg-gray-100"
-                      )}
-                      title={needsAttention ? "Confirmar Ciência" : (rowHasNotes ? "Ver Anotações" : "Adicionar Nota")}
-                    >
-                      <div className="relative">
-                        <MessageSquare size={18} fill={rowHasNotes ? "currentColor" : "none"} className={rowHasNotes && !needsAttention ? "fill-orange-500/20" : ""} />
-                        {rowHasNotes && (
-                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm border border-white">
-                                {noteCount}
-                            </span>
-                        )}
-                      </div>
+                    <button onClick={() => onNoteClick(row)} className={clsx("p-2 rounded-full relative transition-all group", needsAttention ? "bg-red-600 text-white shadow-lg" : noteCount > 0 ? "text-orange-500 bg-orange-50" : "text-gray-400 hover:text-primary-600 hover:bg-gray-100")}>
+                      <MessageSquare size={18} fill={noteCount > 0 ? "currentColor" : "none"} />
+                      {noteCount > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-white">{noteCount}</span>}
                     </button>
                   </td>
                 </tr>
@@ -582,78 +450,26 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       <div className="md:hidden space-y-4">
         {sortedData.map((row, idx) => {
            const noteCount = getNoteCount(row.CTE);
-           const rowHasNotes = noteCount > 0;
-           
-           const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
-           const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
-           
-           const userHasUnit = !!user?.linkedDestUnit;
-           const needsAttention = isEmBusca && !userHasInteracted && userHasUnit;
-
+           const needsAttention = isCteEmBusca(row.CTE, row.SERIE, row.STATUS) && !notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase()) && !!user?.linkedDestUnit;
            return (
-            <div 
-                key={`${row.CTE}-${idx}`} 
-                className={clsx(
-                    "bg-white p-4 rounded-lg shadow border-l-4 transition-all",
-                    needsAttention ? "border-red-500 bg-red-50" : "border-primary-500"
-                )}
-            >
-              {needsAttention && (
-                  <div className="mb-2 flex items-center gap-2 text-red-600 font-bold text-xs bg-red-100 p-1.5 rounded w-fit">
-                      <AlertTriangle size={12} /> PENDÊNCIA DE BUSCA
-                  </div>
-              )}
+            <div key={`${row.CTE}-${idx}`} className={clsx("bg-white p-4 rounded-lg shadow border-l-4 transition-all", needsAttention ? "border-red-500 bg-red-50" : "border-primary-500")}>
               <div className="flex justify-between items-start mb-2">
-                <div>
-                    <div className="text-lg font-bold text-gray-900">CTE {row.CTE}</div>
-                    <div className="text-xs text-gray-500">Série {row.SERIE}</div>
-                </div>
-                <div className="flex flex-col gap-1 items-end">
-                    <StatusBadge status={row.STATUS_CALCULADO || row.STATUS} />
-                    <StatusBadge 
-                        status={row.FRETE_PAGO} 
-                        onClick={() => showFilters && setPaymentFilters(prev => toggleFilter(prev, row.FRETE_PAGO))}
-                    />
-                </div>
+                <div><div className="text-lg font-bold text-gray-900">CTE {row.CTE}</div><div className="text-xs text-gray-500">Série {row.SERIE}</div></div>
+                <div className="flex flex-col gap-1 items-end"><StatusBadge status={row.STATUS_CALCULADO || row.STATUS} /><StatusBadge status={row.FRETE_PAGO} /></div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 mb-3">
-                <div>
-                  <span className="block text-xs text-gray-400">Limite</span>
-                  <span className={clsx("font-bold", row.STATUS_CALCULADO === 'FORA DO PRAZO' ? 'text-red-600' : 'text-gray-700')}>
-                    {row.DATA_LIMITE_BAIXA}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs text-gray-400">Valor</span>
-                  <span className="font-mono font-bold">{row.VALOR_CTE}</span>
-                </div>
-                <div className="col-span-2 mt-1 pt-1 border-t border-gray-50">
-                   <div className="flex flex-col">
-                       <span className="text-[10px] uppercase font-bold text-primary-600">{row.ENTREGA}</span>
-                       <span className="font-medium truncate text-gray-800">{row.DESTINATARIO}</span>
-                   </div>
-                </div>
+              <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 mb-3 pt-2 border-t border-gray-50">
+                <div><span className="block text-xs text-gray-400">Limite</span><span className="font-bold">{row.DATA_LIMITE_BAIXA}</span></div>
+                <div><span className="block text-xs text-gray-400">Valor</span><span className="font-mono font-bold">{row.VALOR_CTE}</span></div>
               </div>
-
-              <div className="flex justify-end border-t pt-2">
-                  <button 
-                    onClick={() => onNoteClick(row)}
-                    className={clsx(
-                      "flex items-center font-medium text-sm transition-colors px-3 py-1.5 rounded-lg",
-                      needsAttention 
-                        ? "bg-red-600 text-white shadow-lg shadow-red-500/30" 
-                        : (rowHasNotes ? "text-orange-500" : "text-gray-500 hover:text-primary-600")
-                    )}
-                  >
-                    <MessageSquare size={16} className="mr-1" fill={rowHasNotes ? "currentColor" : "none"} />
-                    {needsAttention ? "Resolver / Ciente" : (rowHasNotes ? `Ver Notas (${noteCount})` : 'Adicionar Nota')}
+              <div className="flex justify-end pt-2 border-t border-gray-50">
+                  <button onClick={() => onNoteClick(row)} className={clsx("flex items-center font-medium text-sm transition-colors px-3 py-1.5 rounded-lg", needsAttention ? "bg-red-600 text-white shadow-lg" : noteCount > 0 ? "text-orange-500" : "text-gray-500")}>
+                    <MessageSquare size={16} className="mr-1" fill={noteCount > 0 ? "currentColor" : "none"} />
+                    {needsAttention ? "Resolver / Ciente" : (noteCount > 0 ? `Notas (${noteCount})` : 'Anotar')}
                   </button>
               </div>
             </div>
            );
         })}
-         {filteredData.length === 0 && <div className="p-8 text-center text-gray-400 text-sm bg-white rounded-lg border border-dashed">Nenhum resultado.</div>}
       </div>
     </div>
   );
