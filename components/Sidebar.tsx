@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, ClipboardList, AlertTriangle, Search, Settings, Key, LogOut, Menu, X } from 'lucide-react';
+import { Home, ClipboardList, AlertTriangle, Search, Settings, Key, LogOut, Menu, X, Tag } from 'lucide-react';
 import { Page } from '../types';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,7 @@ const Sidebar: React.FC<Props> = ({ currentPage, setPage, logout }) => {
     { id: Page.PENDENCIAS, label: 'Pendências', icon: ClipboardList, count: counts.pendencias },
     { id: Page.CRITICOS, label: 'Críticos', icon: AlertTriangle, count: counts.criticos },
     { id: Page.EM_BUSCA, label: 'Em Busca', icon: Search, count: counts.emBusca },
+    { id: Page.TAD, label: 'TAD', icon: Tag, count: counts.tad },
   ];
 
   // Only show settings for admin (Case insensitive check)
@@ -64,7 +65,8 @@ const Sidebar: React.FC<Props> = ({ currentPage, setPage, logout }) => {
             {!collapsed && item.count > 0 && (
                 <span className={clsx(
                     "text-[10px] font-bold px-2 py-0.5 rounded-full",
-                    item.id === Page.CRITICOS || item.id === Page.EM_BUSCA ? "bg-red-500 text-white" : "bg-primary-600 text-primary-200"
+                    item.id === Page.CRITICOS || item.id === Page.EM_BUSCA ? "bg-red-500 text-white" : 
+                    item.id === Page.TAD ? "bg-violet-500 text-white" : "bg-primary-600 text-primary-200"
                 )}>
                     {item.count}
                 </span>
@@ -74,7 +76,8 @@ const Sidebar: React.FC<Props> = ({ currentPage, setPage, logout }) => {
             {collapsed && item.count > 0 && (
                 <div className={clsx(
                     "absolute top-2 right-2 w-2 h-2 rounded-full",
-                    item.id === Page.CRITICOS || item.id === Page.EM_BUSCA ? "bg-red-500" : "bg-primary-400"
+                    item.id === Page.CRITICOS || item.id === Page.EM_BUSCA ? "bg-red-500" : 
+                    item.id === Page.TAD ? "bg-violet-500" : "bg-primary-400"
                 )} />
             )}
           </button>

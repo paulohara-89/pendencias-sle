@@ -7,11 +7,19 @@ interface KPICounts {
   pendencias: number;
   criticos: number;
   emBusca: number;
+  tad: number;
+}
+
+interface Attachment {
+  name: string;
+  type: string;
+  base64: string;
 }
 
 interface DataContextType {
   baseData: CteData[];
   processedData: CteData[];
+  fullData: CteData[];
   notes: NoteData[];
   processControlData: ProcessData[];
   users: UserData[];
@@ -24,15 +32,16 @@ interface DataContextType {
   setFilterDirection: (d: 'all' | 'inbound' | 'outbound') => void;
   searchTerm: string;
   setSearchTerm: (s: string) => void;
-  addNote: (note: Omit<NoteData, 'ID'> & { base64Image?: string }) => Promise<void>;
+  addNote: (note: Omit<NoteData, 'ID'> & { attachments?: Attachment[] }) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
-  resolveIssue: (cte: string, serie?: string) => Promise<void>;
+  resolveIssue: (cte: string, serie?: string, customText?: string) => Promise<void>;
   addUser: (user: UserData) => Promise<void>;
   deleteUser: (username: string) => Promise<void>;
   saveProfile: (profile: ProfileData) => Promise<void>;
   deleteProfile: (name: string) => Promise<void>;
   globalData: GlobalData;
   isCteEmBusca: (cte: string, serie: string, originalStatus: string) => boolean;
+  isCteTad: (cte: string, serie: string) => boolean;
   counts: KPICounts;
   getLatestNote: (cte: string) => NoteData | null;
 }
@@ -93,7 +102,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [filterDirection, setFilterDirection] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [processedData, setProcessedData] = useState<CteData[]>([]);
-  const [counts, setCounts] = useState<KPICounts>({ pendencias: 0, criticos: 0, emBusca: 0 });
+  const [fullData, setFullData] = useState<CteData[]>([]);
+  const [counts, setCounts] = useState<KPICounts>({ pendencias: 0, criticos: 0, emBusca: 0, tad: 0 });
 
   const refreshData = async () => {
     setLoading(true);
@@ -105,16 +115,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsers(result.users);
       setProfiles(result.profiles || []);
       setGlobalData(result.data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    refreshData();
-  }, []);
+  useEffect(() => { refreshData(); }, []);
 
   const getLatestNote = (cte: string) => {
       const cteNotes = notes.filter(n => n.CTE === cte);
@@ -139,30 +143,80 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })[0];
   };
 
+  const isCteTad = (cte: string, serie: string) => {
+      const cleanSerie = String(serie || '').replace(/^0+/, '');
+      
+      // 1. Check Process Control History (Source of Truth do Backend)
+      let history = processControlData.filter(p => p.CTE === cte);
+      if (cleanSerie) {
+          history = history.filter(p => String(p.SERIE || '').replace(/^0+/, '') === cleanSerie);
+      }
+      
+      if (history.length > 0) {
+          const latestProcess = history[history.length - 1]; // Assume ordem cronológica da planilha
+          
+          // Se estiver resolvido, não é TAD
+          if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA') return false;
+          
+          // Se for explicitamente TAD
+          if (latestProcess.STATUS === 'TAD') return true;
+          
+          // Workaround: Backend converte TAD para EM BUSCA
+          // Detectamos TAD pela descrição se o status for EM BUSCA
+          if (latestProcess.STATUS === 'EM BUSCA' && 
+              (latestProcess.DESCRIPTION || '').toUpperCase().includes('TAD')) return true;
+      }
+      
+      // 2. Fallback: Check Latest Note (Source of Truth do Frontend/Anotações)
+      // Isso cobre o delay de atualização do Process Control e garante persistência se a descrição do PC falhar
+      const latestNote = getLatestNote(cte);
+      if (latestNote) {
+           // Se a nota diz que resolveu, então não é TAD
+           if (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA') return false;
+           
+           // Se a nota tem texto de início de TAD (nossa "assinatura")
+           if ((latestNote.TEXTO || '').toUpperCase().includes('TAD INICIADO')) {
+               // Verifica se não há um status de resolução posterior no baseData
+               const currentCte = baseData.find(c => c.CTE === cte && (!cleanSerie || String(c.SERIE).replace(/^0+/, '') === cleanSerie));
+               if (currentCte && (currentCte.STATUS === 'RESOLVIDO' || currentCte.STATUS === 'LOCALIZADA')) return false;
+               return true;
+           }
+           
+           // Se a nota tem status explícito de TAD
+           if (latestNote.STATUS_BUSCA === 'TAD') return true;
+      }
+
+      return false;
+  };
+
   const isCteEmBusca = (cte: string, serie: string, originalStatus: string) => {
+      // Prioridade: Se é TAD, não é "Apenas Em Busca"
+      if (isCteTad(cte, serie)) return false;
+
       const cleanSerie = String(serie || '').replace(/^0+/, '');
       let history = processControlData.filter(p => p.CTE === cte);
       if (cleanSerie) {
           history = history.filter(p => String(p.SERIE || '').replace(/^0+/, '') === cleanSerie);
       }
+      
       if (history.length > 0) {
           const latestProcess = history[history.length - 1];
-          if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA') return false;
           if (latestProcess.STATUS === 'EM BUSCA') return true;
+          if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA' || latestProcess.STATUS === 'TAD') return false;
       }
-      if (originalStatus === 'EM BUSCA') {
+      
+      // Fallback status original da planilha base ou notas
+      if (history.length === 0 && originalStatus === 'EM BUSCA') {
           const latest = getLatestNote(cte);
           if (latest && (latest.STATUS_BUSCA === 'RESOLVIDO' || latest.STATUS_BUSCA === 'LOCALIZADA')) return false;
           return true;
       }
-      const latest = getLatestNote(cte);
-      return latest?.STATUS_BUSCA === 'EM BUSCA';
+      return false;
   };
 
   useEffect(() => {
     if (baseData.length === 0) {
-      setProcessedData([]);
-      setCounts({ pendencias: 0, criticos: 0, emBusca: 0 });
+      setProcessedData([]); setFullData([]); setCounts({ pendencias: 0, criticos: 0, emBusca: 0, tad: 0 });
       return;
     }
 
@@ -201,16 +255,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           else if (isEqual(refTomorrow, limitDate)) status = 'VENCE AMANHÃ';
           else status = 'NO PRAZO';
       }
-      return { ...item, STATUS_CALCULADO: status };
+      
+      // Override visual do STATUS se for TAD detectado
+      let displayStatus = item.STATUS;
+      if (isCteTad(item.CTE, item.SERIE)) {
+          displayStatus = 'TAD';
+      }
+
+      return { ...item, STATUS: displayStatus, STATUS_CALCULADO: status };
     });
 
-    // REGRA DE VISIBILIDADE:
-    // 1. Mercadorias EM BUSCA aparecem para TODOS (Global).
-    // 2. Pendências normais respeitam o filtro de unidade do usuário.
-    const filteredByUnit = calculated.filter(d => {
-        // Se estiver em busca, ignora restrição de unidade
-        if (isCteEmBusca(d.CTE, d.SERIE, d.STATUS)) return true;
+    setFullData(calculated);
 
+    const filteredByUnit = calculated.filter(d => {
+        if (isCteEmBusca(d.CTE, d.SERIE, d.STATUS)) return true;
+        if (isCteTad(d.CTE, d.SERIE)) return true;
         if (!user || user.role.toLowerCase() === 'admin') return true;
         if (!user.linkedDestUnit) return true;
         return d.ENTREGA === user.linkedDestUnit;
@@ -224,18 +283,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setProcessedData(filtered);
 
-    let cPendencias = 0;
-    let cCriticos = 0;
-    let cEmBusca = 0;
-
-    // A contagem deve refletir o que o usuário PODE ver
+    let cPendencias = 0; let cCriticos = 0; let cEmBusca = 0; let cTad = 0;
     filteredByUnit.forEach(d => {
         const isCurrentlyEmBusca = isCteEmBusca(d.CTE, d.SERIE, d.STATUS);
-        if (isCurrentlyEmBusca) {
-            cEmBusca++;
-        } else {
-            // Só conta pendência se for da unidade do usuário ou se for admin
-            // (Isso garante que contadores não inflem com lixo, embora o filteredByUnit já deva ter tratado)
+        const isCurrentlyTad = isCteTad(d.CTE, d.SERIE);
+        if (isCurrentlyEmBusca) cEmBusca++;
+        if (isCurrentlyTad) cTad++;
+        if (!isCurrentlyEmBusca && !isCurrentlyTad) {
             const matchesUnit = !user?.linkedDestUnit || d.ENTREGA === user.linkedDestUnit;
             if (matchesUnit) {
                 if (d.STATUS_CALCULADO === 'CRÍTICO') cCriticos++;
@@ -243,24 +297,85 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
     });
-
-    setCounts({ pendencias: cPendencias, criticos: cCriticos, emBusca: cEmBusca });
+    setCounts({ pendencias: cPendencias, criticos: cCriticos, emBusca: cEmBusca, tad: cTad });
   }, [baseData, globalData, filterStatus, searchTerm, filterDirection, notes, user, processControlData]);
 
-  const addNote = async (notePayload: Omit<NoteData, 'ID'> & { base64Image?: string }) => {
+  const addNote = async (notePayload: Omit<NoteData, 'ID'> & { attachments?: Attachment[] }) => {
      const now = new Date();
      const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
      const tempID = "temp-" + Math.random().toString(36).substr(2, 9);
-     const finalNoteLocal: NoteData = { ...notePayload, ID: tempID, DATA: formattedDate, pending: true, LINK_IMAGEM: notePayload.base64Image || "" };
-     setNotes(prev => [...prev, finalNoteLocal]);
+     
+     let processStatus = "";
+     let processDesc = "";
+     
      if (notePayload.STATUS_BUSCA === 'EM BUSCA') {
-         setProcessControlData(prev => [...prev, { ID: tempID, CTE: notePayload.CTE, SERIE: notePayload.SERIE || "", DATA: formattedDate, USER: notePayload.USUARIO, DESCRIPTION: "INICIADO VIA OBS: " + notePayload.TEXTO, LINK: notePayload.base64Image || "", STATUS: "EM BUSCA" }]);
+         processStatus = "EM BUSCA";
+         processDesc = "INICIADO VIA OBS: " + (notePayload.TEXTO || "Sem descrição");
+     } else if (notePayload.STATUS_BUSCA === 'TAD') {
+         processStatus = "TAD";
+         processDesc = "TAD INICIADO: " + (notePayload.TEXTO || "Sem descrição");
      }
+
+     const finalNoteLocal: NoteData = { 
+         ...notePayload, 
+         ID: tempID, 
+         DATA: formattedDate, 
+         pending: true, 
+         LINK_IMAGEM: "" 
+     };
+     
+     // Adicionamos a nota localmente com o texto formatado (processDesc) se for TAD/BUSCA
+     // Isso garante que a detecção isCteTad via getLatestNote funcione imediatamente
+     if (processStatus) {
+         finalNoteLocal.TEXTO = processDesc;
+     }
+
+     setNotes(prev => [...prev, finalNoteLocal]);
+     
+     if (processStatus) {
+         setProcessControlData(prev => [...prev, { 
+             ID: tempID, CTE: notePayload.CTE, SERIE: notePayload.SERIE || "", DATA: formattedDate, USER: notePayload.USUARIO, DESCRIPTION: processDesc, LINK: "", STATUS: processStatus 
+         }]);
+     }
+     
+     // Limpeza e preparação robusta de anexos
+     const cleanAttachments = (notePayload.attachments || []).map(att => {
+        let base64Data = att.base64;
+        const idx = base64Data.indexOf(',');
+        if (idx > -1) base64Data = base64Data.substring(idx + 1);
+        
+        return {
+            fileName: att.name, // Compatibilidade com Apps Script padrão
+            name: att.name,
+            mimeType: att.type, // Compatibilidade com Apps Script padrão
+            type: att.type,
+            data: base64Data,   // Compatibilidade com Apps Script padrão
+            base64: base64Data
+        };
+     });
+
      try {
-         await postToSheet('addNote', { cte: notePayload.CTE, serie: notePayload.SERIE || "", username: notePayload.USUARIO, user: notePayload.USUARIO, text: notePayload.TEXTO, image: notePayload.base64Image || "", markInSearch: notePayload.STATUS_BUSCA === 'EM BUSCA' });
+         // Se for TAD, usamos a descrição enriquecida para garantir que o texto "TAD" vá para o backend
+         const textToSend = (notePayload.STATUS_BUSCA === 'TAD') ? processDesc : (notePayload.TEXTO || "Sem descrição");
+         const shouldMarkInSearch = notePayload.STATUS_BUSCA === 'EM BUSCA' || notePayload.STATUS_BUSCA === 'TAD';
+
+         await postToSheet('addNote', { 
+           cte: notePayload.CTE, 
+           serie: notePayload.SERIE || "", 
+           username: notePayload.USUARIO, 
+           user: notePayload.USUARIO, 
+           text: textToSend, 
+           image: cleanAttachments.length > 0 ? cleanAttachments[0].base64 : "", // Legacy single image
+           attachments: cleanAttachments,
+           markInSearch: shouldMarkInSearch, 
+           status_busca: notePayload.STATUS_BUSCA, 
+           status: processStatus || notePayload.STATUS_BUSCA,
+           currentStatus: processStatus || notePayload.STATUS_BUSCA
+         });
+         
          setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false } : n));
-         setTimeout(() => { refreshData(); }, 1500);
-     } catch (error) { console.error(error); }
+         setTimeout(() => { refreshData(); }, 2000);
+     } catch (error) { console.error("Add Note Failed", error); }
   };
 
   const deleteNote = async (id: string) => {
@@ -271,22 +386,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
   };
 
-  const resolveIssue = async (cte: string, serie?: string) => {
+  const resolveIssue = async (cte: string, serie?: string, customText?: string) => {
       let targetSerie = serie || baseData.find(c => c.CTE === cte)?.SERIE || "0";
       const now = new Date();
       const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      const textMsg = "RESOLVIDO: Mercadoria marcada como LOCALIZADA.";
+      const textMsg = customText || "RESOLVIDO: Mercadoria marcada como LOCALIZADA.";
       const username = user?.username || "Sistema";
       const cleanSerie = String(targetSerie).replace(/^0+/, '');
       setBaseData(prev => prev.map(item => (item.CTE === cte && String(item.SERIE).replace(/^0+/, '') === cleanSerie) ? { ...item, STATUS: 'RESOLVIDO' } : item));
-      setProcessedData(prev => prev.map(item => (item.CTE === cte && String(item.SERIE).replace(/^0+/, '') === cleanSerie) ? { ...item, STATUS: 'RESOLVIDO' } : item));
       const resolveNote: NoteData = { ID: "temp-resolve-" + Math.random(), CTE: cte, SERIE: targetSerie!, CODIGO: "0", DATA: formattedDate, USUARIO: username, TEXTO: textMsg, LINK_IMAGEM: "", STATUS_BUSCA: "RESOLVIDO", pending: true };
       setNotes(prev => [...prev, resolveNote]);
       setProcessControlData(prev => [...prev, { ID: resolveNote.ID, CTE: cte, SERIE: targetSerie!, DATA: formattedDate, USER: username, DESCRIPTION: textMsg, LINK: "", STATUS: "RESOLVIDO" }]);
       try {
           await postToSheet('addNote', { cte: cte, serie: targetSerie, username: username, user: username, text: textMsg, markInSearch: false, status: 'RESOLVIDO', status_busca: 'RESOLVIDO' });
           await postToSheet('stopAlarm', { cte: cte, serie: targetSerie });
-          alert("Mercadoria localizada!");
+          alert("Situação resolvida!");
           setTimeout(() => { refreshData(); }, 3000);
       } catch (error) { alert("Erro ao resolver."); }
   };
@@ -310,7 +424,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <DataContext.Provider value={{ baseData, processedData, notes, users, profiles, processControlData, loading, refreshData, filterStatus, setFilterStatus, filterDirection, setFilterDirection, searchTerm, setSearchTerm, addNote, deleteNote, resolveIssue, addUser, deleteUser, saveProfile, deleteProfile, globalData, isCteEmBusca, counts, getLatestNote }}>
+    <DataContext.Provider value={{ baseData, processedData, fullData, notes, users, profiles, processControlData, loading, refreshData, filterStatus, setFilterStatus, filterDirection, setFilterDirection, searchTerm, setSearchTerm, addNote, deleteNote, resolveIssue, addUser, deleteUser, saveProfile, deleteProfile, globalData, isCteEmBusca, isCteTad, counts, getLatestNote }}>
       {children}
     </DataContext.Provider>
   );

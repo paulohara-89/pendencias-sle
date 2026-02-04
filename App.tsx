@@ -13,7 +13,7 @@ import { Page, CteData } from './types';
 
 const AppContent: React.FC = () => {
   const { user, logout } = useAuth();
-  const { processedData, isCteEmBusca } = useData();
+  const { processedData, isCteEmBusca, isCteTad } = useData();
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [selectedCte, setSelectedCte] = useState<CteData | null>(null);
 
@@ -29,7 +29,7 @@ const AppContent: React.FC = () => {
         return (
           <DataTable 
             title="Painel de Pendências" 
-            data={processedData.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS))} 
+            data={processedData.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS) && !isCteTad(d.CTE, d.SERIE))} 
             onNoteClick={setSelectedCte}
             isPendencyView={true}
           />
@@ -38,19 +38,31 @@ const AppContent: React.FC = () => {
         return (
           <DataTable 
             title="Pendências Críticas" 
-            data={processedData.filter(d => d.STATUS_CALCULADO === 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS))} 
+            data={processedData.filter(d => d.STATUS_CALCULADO === 'CRÍTICO' && !isCteEmBusca(d.CTE, d.SERIE, d.STATUS) && !isCteTad(d.CTE, d.SERIE))} 
             onNoteClick={setSelectedCte}
             enableFilters={true}
             isCriticalView={true}
           />
         );
       case Page.EM_BUSCA:
-        // Exibe mercadorias em busca (a filtragem de unidade é ignorada via ignoreUnitFilter para permitir visão global)
+        // Exibe mercadorias em busca
         const emBuscaData = processedData.filter(d => isCteEmBusca(d.CTE, d.SERIE, d.STATUS));
         return (
            <DataTable 
             title="Mercadorias em Busca" 
             data={emBuscaData}
+            onNoteClick={setSelectedCte}
+            enableFilters={true}
+            ignoreUnitFilter={true}
+          />
+        );
+      case Page.TAD:
+        // Exibe mercadorias em TAD
+        const tadData = processedData.filter(d => isCteTad(d.CTE, d.SERIE));
+        return (
+           <DataTable 
+            title="Processo TAD" 
+            data={tadData}
             onNoteClick={setSelectedCte}
             enableFilters={true}
             ignoreUnitFilter={true}

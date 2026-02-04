@@ -1,3 +1,4 @@
+
 export interface CteData {
   CTE: string;
   SERIE: string;
@@ -16,6 +17,7 @@ export interface CteData {
   DESTINATARIO: string;
   JUSTIFICATIVA: string;
   STATUS_CALCULADO?: 'FORA DO PRAZO' | 'CRÍTICO' | 'PRIORIDADE' | 'VENCE AMANHÃ' | 'NO PRAZO';
+  IS_HISTORICAL?: boolean; // Flag to indicate if data comes from history/logs
 }
 
 export interface NoteData {
@@ -67,6 +69,7 @@ export enum Page {
   PENDENCIAS = 'pendencias',
   CRITICOS = 'criticos',
   EM_BUSCA = 'em_busca',
+  TAD = 'tad',
   CONFIGURACOES = 'configuracoes',
   MUDAR_SENHA = 'mudar_senha',
 }

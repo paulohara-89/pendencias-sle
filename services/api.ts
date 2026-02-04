@@ -27,14 +27,12 @@ const normalizeCteData = (raw: any[]): CteData[] => {
     CTE: row.CTE || row.cte || row['NUMERO_CTE'] || '',
     SERIE: row.SERIE || row.serie || '',
     CODIGO: row.CODIGO || row.codigo || '',
-    // Map specific headers from screenshot
     DATA_EMISSAO: row['DATA EMISSAO'] || row.DATA_EMISSAO || row.data_emissao || '',
     PRAZO_BAIXA_DIAS: row['PRAZO PARA BAIXA (DIAS)'] || row.PRAZO_BAIXA_DIAS || '',
     DATA_LIMITE_BAIXA: row['DATA LIMITE DE BAIXA'] || row.DATA_LIMITE_BAIXA || row.DATA_LIMITE || row.VENCIMENTO || '',
     STATUS: row.STATUS || '',
     COLETA: row.COLETA || row.ORIGEM || '',
     ENTREGA: row.ENTREGA || row.DESTINO || '',
-    // Map specific headers from screenshot for Value
     VALOR_CTE: row['VALOR DO CTE'] || row.VALOR_CTE || row.VALOR || row['VALOR (R$)'] || row.Valor || '0', 
     TX_ENTREGA: row.TX_ENTREGA || '',
     VOLUMES: row.VOLUMES || '',
@@ -47,7 +45,6 @@ const normalizeCteData = (raw: any[]): CteData[] => {
 
 const normalizeNotes = (raw: any[]): NoteData[] => {
   return raw.map(row => {
-    // Robust ID retrieval: check ID, id, Id and ensure it's a string
     const rawId = row.ID || row.id || row.Id || '';
     return {
       ID: String(rawId), 
@@ -58,10 +55,11 @@ const normalizeNotes = (raw: any[]): NoteData[] => {
       USUARIO: row.USUARIO || row.usuario || 'Sistema',
       TEXTO: row.TEXTO || row.texto || '',
       LINK_IMAGEM: row.LINK_IMAGEM || row.link_imagem || '',
-      STATUS_BUSCA: row.STATUS_BUSCA || row.status_busca || '',
+      // Correção: Adicionado row.STATUS e row.status para ler corretamente a coluna H da planilha
+      STATUS_BUSCA: row.STATUS_BUSCA || row.status_busca || row.STATUS || row.status || '',
       pending: false
     };
-  }).filter(n => n.ID !== ''); // Filter out empty rows/bad IDs
+  }).filter(n => n.ID !== '');
 };
 
 const normalizeUsers = (raw: any[]): UserData[] => {
@@ -71,12 +69,11 @@ const normalizeUsers = (raw: any[]): UserData[] => {
     role: row.role || row.ROLE || '',
     linkedOriginUnit: row.linkedOriginUnit || '',
     linkedDestUnit: row.linkedDestUnit || ''
-  })).filter(u => u.username); // Ensure we don't return users without usernames
+  })).filter(u => u.username);
 };
 
 const normalizeProfiles = (raw: any[]): ProfileData[] => {
   return raw.map(row => {
-    // Handle permissions which might be a comma-separated string in CSV
     let perms: string[] = [];
     const rawPerms = row.permissions || row.PERMISSIONS;
     if (typeof rawPerms === 'string') {
@@ -88,7 +85,7 @@ const normalizeProfiles = (raw: any[]): ProfileData[] => {
       description: row.description || row.DESCRIPTION || '',
       permissions: perms
     };
-  }).filter(p => p.name); // Ensure we don't return profiles without names
+  }).filter(p => p.name);
 };
 
 const normalizeProcess = (raw: any[]): ProcessData[] => {
@@ -110,7 +107,7 @@ export const fetchSheetData = async () => {
     fetchCsv<any>(URLS.NOTES),
     fetchCsv<any>(URLS.USERS),
     fetchCsv<any>(URLS.PROFILES),
-    fetchCsv<any>(URLS.DATA, { header: false }), // Fetch DATA without headers to access by index
+    fetchCsv<any>(URLS.DATA, { header: false }),
     fetchCsv<any>(URLS.PROCESS_CONTROL),
   ]);
 
@@ -120,30 +117,21 @@ export const fetchSheetData = async () => {
   const profiles = normalizeProfiles(profilesRaw);
   const process = normalizeProcess(processRaw);
 
-  // Process Global Data by cell position (B1, B2, B3)
-  const data: GlobalData = {
-      today: '',
-      tomorrow: '',
-      deadlineDays: 2
-  };
+  const data: GlobalData = { today: '', tomorrow: '', deadlineDays: 2 };
   
   if (globalRaw && globalRaw.length >= 3) {
-      // Assuming layout: Column A (Label), Column B (Value)
       const rows = globalRaw as unknown as string[][];
       data.today = rows[0]?.[1] || '';
       data.tomorrow = rows[1]?.[1] || '';
       const days = parseInt(rows[2]?.[1]);
       data.deadlineDays = isNaN(days) ? 2 : days;
-  } else {
-     console.warn('Global Data sheet format unexpected, using defaults');
   }
 
   return { base, notes, users, profiles, data, process };
 };
 
 export const postToSheet = async (action: string, payload: any) => {
-  // CRITICAL FIX: Send as raw JSON string, not FormData.
-  // The App Script uses JSON.parse(e.postData.contents), so we must match that structure.
+  // Envia como string JSON para corresponder ao e.postData.contents no Apps Script
   const body = JSON.stringify({
     action: action,
     payload: payload
@@ -152,14 +140,28 @@ export const postToSheet = async (action: string, payload: any) => {
   try {
     const response = await fetch(URLS.APP_SCRIPT, {
       method: 'POST',
-      // Using text/plain avoids some CORS preflight issues in Google Apps Script
       headers: {
         'Content-Type': 'text/plain;charset=utf-8', 
       },
       body: body,
+      redirect: 'follow' // Importante para Apps Script
     });
-    const json = await response.json();
-    return json.success;
+    
+    // Lê primeiro como texto para evitar crash em erros HTML
+    const responseText = await response.text();
+    
+    try {
+        const json = JSON.parse(responseText);
+        // Retorna sucesso mesmo se json.success for undefined (alguns scripts retornam direto)
+        return json.success !== false;
+    } catch (parseError) {
+        console.warn("Resposta não-JSON do servidor:", responseText);
+        // Se a resposta contiver "Success" ou similar em texto, consideramos ok
+        if (responseText.includes('Success') || responseText.includes('true')) {
+            return true;
+        }
+        throw new Error("Formato de resposta inválido do servidor: " + responseText.substring(0, 100));
+    }
   } catch (error) {
     console.error('API Error:', error);
     throw error;

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CteData } from '../types';
 import StatusBadge from './StatusBadge';
-import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle, CalendarCheck2 } from 'lucide-react';
+import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle, CalendarCheck2, Coins, Tag, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -31,47 +31,48 @@ interface FilterCardProps {
   selected: boolean;
   dimmed?: boolean; // New prop for visual feedback
   onClick: () => void;
+  compact?: boolean; // Unused but kept for interface compatibility if needed, we'll rely on unified sizing mostly
 }
 
+// Redesigned Filter Card: More compact, better spacing
 const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, dimmed, onClick }) => (
   <div 
       onClick={onClick}
       className={clsx(
-          "rounded-lg p-2 border transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:shadow-sm min-h-[60px]",
+          "rounded-md border transition-all cursor-pointer flex flex-col justify-center px-3 py-2 relative overflow-hidden group select-none h-[52px]",
           selected 
-              ? "bg-white ring-1 ring-inset z-10 scale-[1.02]" 
-              : "bg-gray-50 border-gray-200 hover:bg-white",
-          dimmed && !selected ? "opacity-40 hover:opacity-80 scale-95 grayscale-[0.5]" : "opacity-100"
+              ? "bg-white ring-1 ring-inset shadow-sm z-10" 
+              : "bg-white border-gray-200 hover:bg-gray-50",
+          dimmed && !selected ? "opacity-50 grayscale-[0.8]" : "opacity-100"
       )}
       style={{ 
           borderColor: selected ? color : undefined, 
           backgroundColor: selected ? `${color}08` : undefined
       }}
   >
-      {selected && (
-          <div className="absolute top-1 right-1">
-              <CheckCircle size={12} fill={color} className="text-white" />
-          </div>
-      )}
-      <span className="font-bold text-[10px] uppercase tracking-wider text-gray-500 truncate block pr-3" style={{ color: selected ? color : undefined }}>
-          {label}
-      </span>
-      <div className="mt-1">
-          <span className="text-lg font-bold text-gray-800 leading-none">{count}</span>
+      <div className="flex justify-between items-start w-full">
+          <span className="font-bold uppercase tracking-wider text-[9px] truncate mr-2" style={{ color: selected ? color : '#9ca3af' }}>
+              {label}
+          </span>
+          {selected && <CheckCircle size={10} fill={color} className="text-white shrink-0" />}
       </div>
-      <div className="absolute bottom-0 left-0 h-0.5 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.3 }} />
+      <div className="mt-0.5">
+          <span className="font-bold text-gray-800 text-sm leading-none">{count}</span>
+      </div>
+      <div className="absolute bottom-0 left-0 h-0.5 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.2 }} />
   </div>
 );
 
 const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView = false, isCriticalView = false, enableFilters = false, ignoreUnitFilter = false }) => {
   const { user } = useAuth();
-  const { notes, getLatestNote, processedData, baseData, isCteEmBusca } = useData();
+  const { notes, getLatestNote, processedData, baseData, fullData, processControlData, isCteEmBusca } = useData();
 
   // --- Filter State ---
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
   const [noteFilter, setNoteFilter] = useState<'ALL' | 'WITH' | 'WITHOUT'>('ALL');
+  const [filterTxEntrega, setFilterTxEntrega] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   
   // --- Sort State ---
@@ -79,8 +80,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
   // --- Constants ---
   const STATUS_OPTIONS = useMemo(() => {
+    if (isCriticalView) return [];
     if (isPendencyView) return ['FORA DO PRAZO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'];
-    if (isCriticalView) return ['CRÍTICO'];
     return ['CRÍTICO', 'FORA DO PRAZO', 'PRIORIDADE', 'VENCE AMANHÃ', 'NO PRAZO'];
   }, [isPendencyView, isCriticalView]);
 
@@ -101,7 +102,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     'FATURAR_DEST': '#f97316'
   };
 
-  // Encontra a data mais recente baseada na coluna DATA EMISSAO
   const latestEmissaoDate = useMemo(() => {
     if (baseData.length === 0) return '--/--/----';
     let maxVal = 0;
@@ -117,7 +117,6 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     return maxStr || '--/--/----';
   }, [baseData]);
 
-  // --- Helpers ---
   const toggleFilter = (list: string[], item: string) => {
     return list.includes(item) ? list.filter(i => i !== item) : [...list, item];
   };
@@ -146,43 +145,118 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     }));
   };
 
-  // --- Data Processing ---
   const availableUnits = useMemo(() => {
-    const sourceForUnits = globalSearch.trim().length > 0 ? processedData : data;
+    // During global search, allow searching any unit found in fullData
+    const sourceForUnits = globalSearch.trim().length > 0 ? fullData : data;
     const units = new Set(sourceForUnits.map(d => d.ENTREGA).filter(Boolean));
     return Array.from(units).sort();
-  }, [data, processedData, globalSearch]);
+  }, [data, fullData, globalSearch]);
 
+  // Main Data Filtering Logic
   const filteredData = useMemo(() => {
     const isGlobalSearch = globalSearch.trim().length > 0;
-    let result = isGlobalSearch ? processedData : data;
+    let result: CteData[] = [];
 
     if (isGlobalSearch) {
-      const term = globalSearch.toLowerCase();
-      result = result.filter(d => 
-        d.CTE.toLowerCase().includes(term) ||
-        d.DESTINATARIO.toLowerCase().includes(term) ||
-        d.ENTREGA.toLowerCase().includes(term) ||
-        d.SERIE.toLowerCase().includes(term)
-      );
+        // GLOBAL SEARCH MODE: 
+        // 1. Search in fullData (All active CTEs, unfiltered by unit)
+        // 2. Search in Process Control/Notes (History)
+        
+        const term = globalSearch.toLowerCase();
+        
+        // A. Search Active Data (fullData)
+        const activeMatches = fullData.filter(d => 
+            d.CTE.toLowerCase().includes(term) ||
+            (d.DESTINATARIO || '').toLowerCase().includes(term) ||
+            (d.ENTREGA || '').toLowerCase().includes(term) ||
+            (d.SERIE || '').toLowerCase().includes(term)
+        );
+
+        // B. Search Historical Data (Process Logs + Notes)
+        // We look for CTE numbers that match the search term but aren't in activeMatches
+        const matchedCtesInHistory = new Set<string>();
+        
+        // Helper to check if CTE is already in active results
+        const isAlreadyActive = (cte: string) => activeMatches.some(a => a.CTE === cte);
+
+        processControlData.forEach(p => {
+             if (p.CTE.includes(term) && !isAlreadyActive(p.CTE)) {
+                 matchedCtesInHistory.add(p.CTE);
+             }
+        });
+        
+        // Also check notes for loose CTE matches
+        notes.forEach(n => {
+            if (n.CTE.includes(term) && !isAlreadyActive(n.CTE)) {
+                 matchedCtesInHistory.add(n.CTE);
+            }
+        });
+
+        // Convert historical matches to Pseudo-CteData objects
+        const historicalMatches: CteData[] = Array.from(matchedCtesInHistory).map(cteStr => {
+            // Try to find ANY info about this CTE in process or notes
+            const pInfo = processControlData.find(p => p.CTE === cteStr);
+            const nInfo = notes.find(n => n.CTE === cteStr);
+            
+            return {
+                CTE: cteStr,
+                SERIE: pInfo?.SERIE || nInfo?.SERIE || '0',
+                CODIGO: '',
+                DATA_EMISSAO: '', // Unknown
+                PRAZO_BAIXA_DIAS: '',
+                DATA_LIMITE_BAIXA: '',
+                STATUS: 'HISTÓRICO',
+                STATUS_CALCULADO: 'NO PRAZO', // Default to avoid crash
+                COLETA: '',
+                ENTREGA: 'ARQUIVO', // Generic Unit
+                VALOR_CTE: '0,00',
+                TX_ENTREGA: '0',
+                VOLUMES: '0',
+                PESO: '0',
+                FRETE_PAGO: '',
+                DESTINATARIO: 'HISTÓRICO / BAIXADO', // Placeholder
+                JUSTIFICATIVA: '',
+                IS_HISTORICAL: true // Flag to render differently
+            };
+        });
+
+        result = [...activeMatches, ...historicalMatches];
+
     } else {
+        // NORMAL MODE: Use the filtered 'data' prop passed from parent (View-Specific)
+        result = data;
+        
+        // If View-Specific filters are needed (Pendency View is usually pre-filtered by parent)
         if (isPendencyView) result = result.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
     }
 
-    const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
-    const effectiveUnit = userRestrictedUnit || selectedUnit;
-    if (effectiveUnit) result = result.filter(d => d.ENTREGA === effectiveUnit);
+    // Apply Standard UI Filters (Unit, Status, Payment, etc.)
+    // Note: In Global Search, we typically ignore the User's Linked Unit restriction to allow "Global" search.
+    // However, if the user explicitly selects a unit from the dropdown, we respect it.
+    
+    const userRestrictedUnit = (ignoreUnitFilter || isGlobalSearch) ? null : user?.linkedDestUnit;
+    const effectiveUnit = selectedUnit || userRestrictedUnit;
+    
+    if (effectiveUnit) {
+        result = result.filter(d => d.ENTREGA === effectiveUnit || (d.IS_HISTORICAL && d.ENTREGA === 'ARQUIVO')); // Keep history visible
+    }
 
     if (statusFilters.length > 0) result = result.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
     if (paymentFilters.length > 0) result = result.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
+    
     if (noteFilter !== 'ALL') {
       result = result.filter(d => {
         const count = getNoteCount(d.CTE);
         return noteFilter === 'WITH' ? count > 0 : count === 0;
       });
     }
+
+    if (filterTxEntrega) {
+        result = result.filter(d => parseCurrency(d.TX_ENTREGA) > 0);
+    }
+
     return result;
-  }, [data, processedData, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, notes, globalSearch, ignoreUnitFilter]);
+  }, [data, fullData, processedData, processControlData, notes, globalSearch, isPendencyView, user, selectedUnit, statusFilters, paymentFilters, noteFilter, filterTxEntrega, ignoreUnitFilter]);
 
   const sortedData = useMemo(() => {
     const sorted = [...filteredData];
@@ -217,50 +291,40 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     return sorted;
   }, [filteredData, sortConfig]);
 
-  // Counts for filters (Corrected for Dynamic Cross-Filtering)
-  const getCount = (filterType: 'status' | 'payment' | 'note', key: string) => {
-      let base = globalSearch.trim().length > 0 ? processedData : data;
-      if (!globalSearch && isPendencyView) base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
+  const getCount = (filterType: 'status' | 'payment' | 'note' | 'txEntrega', key: string) => {
+      // Logic mirrors filteredData but targets specific counts
+      const isGlobalSearch = globalSearch.trim().length > 0;
+      let base = isGlobalSearch ? fullData : data; // Use fullData for global search counts too
       
-      const userRestrictedUnit = ignoreUnitFilter ? null : user?.linkedDestUnit;
-      const effectiveUnit = userRestrictedUnit || selectedUnit;
+      if (!isGlobalSearch && isPendencyView) base = base.filter(d => d.STATUS_CALCULADO !== 'CRÍTICO');
+      
+      const userRestrictedUnit = (ignoreUnitFilter || isGlobalSearch) ? null : user?.linkedDestUnit;
+      const effectiveUnit = selectedUnit || userRestrictedUnit;
       if (effectiveUnit) base = base.filter(d => d.ENTREGA === effectiveUnit);
 
-      // Aplicar filtros das OUTRAS categorias (Cross-Filtering)
-      if (filterType === 'status') {
-          if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
-          if (noteFilter !== 'ALL') {
-              base = base.filter(d => {
-                  const count = getNoteCount(d.CTE);
-                  return noteFilter === 'WITH' ? count > 0 : count === 0;
-              });
-          }
-          return base.filter(d => d.STATUS_CALCULADO === key).length;
+      if (filterType !== 'status' && statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
+      if (filterType !== 'payment' && paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
+      if (filterType !== 'note' && noteFilter !== 'ALL') {
+          base = base.filter(d => {
+              const count = getNoteCount(d.CTE);
+              return noteFilter === 'WITH' ? count > 0 : count === 0;
+          });
       }
-      
-      if (filterType === 'payment') {
-          if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
-          if (noteFilter !== 'ALL') {
-              base = base.filter(d => {
-                  const count = getNoteCount(d.CTE);
-                  return noteFilter === 'WITH' ? count > 0 : count === 0;
-              });
-          }
-          return base.filter(d => d.FRETE_PAGO === key).length;
-      }
-      
+      if (filterType !== 'txEntrega' && filterTxEntrega) base = base.filter(d => parseCurrency(d.TX_ENTREGA) > 0);
+
+      if (filterType === 'status') return base.filter(d => d.STATUS_CALCULADO === key).length;
+      if (filterType === 'payment') return base.filter(d => d.FRETE_PAGO === key).length;
       if (filterType === 'note') {
-         if (statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
-         if (paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
          return base.filter(d => {
              const count = getNoteCount(d.CTE);
              return key === 'WITH' ? count > 0 : count === 0;
          }).length;
       }
+      if (filterType === 'txEntrega') return base.filter(d => parseCurrency(d.TX_ENTREGA) > 0).length;
       return 0;
   };
 
-  const showFilters = isPendencyView || enableFilters;
+  const showFilters = isPendencyView || enableFilters || isCriticalView;
 
   const SortHeader = ({ label, sortKey }: { label: string, sortKey: SortConfig['key'] }) => (
     <th className="px-4 py-3 cursor-pointer group hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort(sortKey)}>
@@ -294,18 +358,25 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                   globalSearch ? "bg-primary-50 border-primary-300 ring-2 ring-primary-100" : "bg-white border-gray-200"
               )}
            />
+           {globalSearch && (
+               <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                   <span className="text-xs font-bold text-primary-600 bg-primary-100 px-2 py-0.5 rounded-full">Global Mode</span>
+               </div>
+           )}
         </div>
-        <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-100 text-emerald-700 text-xs font-bold shadow-sm h-fit self-center">
+        <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-100 text-emerald-700 text-xs font-bold shadow-sm h-fit self-center whitespace-nowrap">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <CalendarCheck2 size={16} />
-            <span>Atualizado até {latestEmissaoDate}</span>
+            <span>Atualizado: {latestEmissaoDate}</span>
         </div>
       </div>
 
       {/* Filter Section */}
-      {showFilters && (
-        <div className={clsx("space-y-3 bg-white p-4 rounded-xl shadow-sm border border-gray-200 transition-opacity", globalSearch ? "opacity-50 pointer-events-none grayscale" : "opacity-100")}>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+      {showFilters && !globalSearch && (
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 transition-opacity">
+            
+            {/* Header com Unidade */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-3 mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                     <Filter size={18} className="text-primary-600" /> Filtros
                 </h2>
@@ -323,54 +394,99 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {STATUS_OPTIONS.map(status => (
-                    <FilterCard 
-                        key={status}
-                        label={status}
-                        count={getCount('status', status)}
-                        color={STATUS_COLORS_MAP[status]}
-                        selected={statusFilters.includes(status)}
-                        dimmed={statusFilters.length > 0}
-                        onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
-                    />
-                ))}
-                 <FilterCard 
-                    label="Com Notas" count={getCount('note', 'WITH')} color={COLORS.priority} 
-                    selected={noteFilter === 'WITH'} dimmed={noteFilter !== 'ALL'}
-                    onClick={() => setNoteFilter(prev => prev === 'WITH' ? 'ALL' : 'WITH')}
-                 />
-                 <FilterCard 
-                    label="Sem Notas" count={getCount('note', 'WITHOUT')} color="#6b7280" 
-                    selected={noteFilter === 'WITHOUT'} dimmed={noteFilter !== 'ALL'}
-                    onClick={() => setNoteFilter(prev => prev === 'WITHOUT' ? 'ALL' : 'WITHOUT')}
-                 />
-            </div>
-            
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
-                {PAYMENT_OPTIONS.map(pay => (
-                    <div 
-                        key={pay} onClick={() => setPaymentFilters(prev => toggleFilter(prev, pay))}
-                        className={clsx(
-                            "flex items-center justify-between px-3 py-1.5 rounded-lg border cursor-pointer transition-all select-none",
-                            paymentFilters.includes(pay) ? "bg-white shadow-sm ring-1 ring-inset scale-[1.02]" : "bg-gray-50 border-gray-100 hover:bg-gray-100",
-                            paymentFilters.length > 0 && !paymentFilters.includes(pay) ? "opacity-40 grayscale" : "opacity-100"
-                        )}
-                        style={{ borderColor: paymentFilters.includes(pay) ? PAYMENT_COLORS_MAP[pay] : undefined }}
-                    >
-                        <div className="flex items-center gap-2">
-                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PAYMENT_COLORS_MAP[pay] }} />
-                           <span className="text-[10px] font-bold text-gray-600">{pay.replace('_', ' ')}</span>
+            <div className="flex flex-col gap-5">
+                
+                {/* BLOCO 1: STATUS (Apenas se não for visualização crítica) */}
+                {STATUS_OPTIONS.length > 0 && (
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Status do Prazo</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                            {STATUS_OPTIONS.map(status => (
+                                <FilterCard 
+                                    key={status}
+                                    label={status}
+                                    count={getCount('status', status)}
+                                    color={STATUS_COLORS_MAP[status]}
+                                    selected={statusFilters.includes(status)}
+                                    dimmed={statusFilters.length > 0}
+                                    onClick={() => setStatusFilters(prev => toggleFilter(prev, status))}
+                                />
+                            ))}
                         </div>
-                        <span className="text-[10px] font-bold text-gray-800">{getCount('payment', pay)}</span>
                     </div>
-                ))}
-             </div>
+                )}
+
+                {/* BLOCO 2: OUTROS FILTROS (Layout Grid/Flex Responsivo) */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6">
+                    
+                    {/* PAGAMENTOS (6 Cols on Desktop) */}
+                    <div className="col-span-1 md:col-span-12 lg:col-span-6 space-y-1.5">
+                        <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Tipo de Pagamento</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {PAYMENT_OPTIONS.map(pay => (
+                                <FilterCard 
+                                    key={pay}
+                                    label={pay.replace('FATURAR_', 'FAT ').replace('_', ' ')}
+                                    count={getCount('payment', pay)}
+                                    color={PAYMENT_COLORS_MAP[pay]}
+                                    selected={paymentFilters.includes(pay)}
+                                    dimmed={paymentFilters.length > 0}
+                                    onClick={() => setPaymentFilters(prev => toggleFilter(prev, pay))}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* NOTAS (3 Cols on Desktop) */}
+                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-1.5">
+                         <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Anotações</label>
+                         <div className="grid grid-cols-2 gap-2">
+                            <FilterCard 
+                                label="Com Notas" count={getCount('note', 'WITH')} color={COLORS.priority} 
+                                selected={noteFilter === 'WITH'} dimmed={noteFilter !== 'ALL'}
+                                onClick={() => setNoteFilter(prev => prev === 'WITH' ? 'ALL' : 'WITH')}
+                            />
+                            <FilterCard 
+                                label="Sem Notas" count={getCount('note', 'WITHOUT')} color="#6b7280" 
+                                selected={noteFilter === 'WITHOUT'} dimmed={noteFilter !== 'ALL'}
+                                onClick={() => setNoteFilter(prev => prev === 'WITHOUT' ? 'ALL' : 'WITHOUT')}
+                            />
+                         </div>
+                    </div>
+
+                    {/* ATRIBUTOS (3 Cols on Desktop - DISCREET DESIGN) */}
+                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-1.5">
+                         <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Atributos</label>
+                         <div 
+                            onClick={() => setFilterTxEntrega(!filterTxEntrega)}
+                            className={clsx(
+                                "flex items-center justify-between px-3 py-2 rounded-md border transition-all cursor-pointer select-none h-[52px]",
+                                filterTxEntrega 
+                                    ? "bg-orange-50 border-orange-300 text-orange-800 ring-1 ring-orange-200 shadow-sm" 
+                                    : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                            )}
+                         >
+                             <div className="flex items-center gap-2.5">
+                                 <div className={clsx("p-1 rounded-full", filterTxEntrega ? "bg-orange-200" : "bg-gray-100")}>
+                                     {filterTxEntrega ? <CheckCircle size={14} className="text-orange-700" /> : <Coins size={14} className="text-gray-400" />}
+                                 </div>
+                                 <span className="text-[10px] font-bold uppercase tracking-wide">Com Taxa</span>
+                             </div>
+                             <span className="font-bold text-sm bg-white/50 px-2 py-0.5 rounded text-gray-700">
+                                 {getCount('txEntrega', '')}
+                             </span>
+                         </div>
+                    </div>
+                </div>
+            </div>
              
-             {(statusFilters.length > 0 || paymentFilters.length > 0 || noteFilter !== 'ALL') && (
-                 <button onClick={() => { setStatusFilters([]); setPaymentFilters([]); setNoteFilter('ALL'); }} className="w-full py-1.5 text-xs text-red-500 font-bold hover:bg-red-50 rounded transition-colors flex items-center justify-center gap-1">
-                    <X size={12} /> Limpar Filtros
-                 </button>
+             {/* FOOTER: CLEAR FILTERS */}
+             {(statusFilters.length > 0 || paymentFilters.length > 0 || noteFilter !== 'ALL' || filterTxEntrega) && (
+                 <div className="flex justify-end mt-6 pt-3 border-t border-gray-100">
+                    <button onClick={() => { setStatusFilters([]); setPaymentFilters([]); setNoteFilter('ALL'); setFilterTxEntrega(false); }} className="px-4 py-2 text-xs text-red-600 font-bold bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center gap-2 border border-red-100">
+                        <X size={14} /> Limpar Todos os Filtros
+                    </button>
+                 </div>
              )}
         </div>
       )}
@@ -409,15 +525,23 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
               const noteCount = getNoteCount(row.CTE);
               const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
               const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
-              const needsAttention = isEmBusca && !userHasInteracted && !!user?.linkedDestUnit;
+              const needsAttention = isEmBusca && !userHasInteracted && !!user?.linkedDestUnit && !row.IS_HISTORICAL;
 
               return (
-                <tr key={`${row.CTE}-${idx}`} className={clsx("transition-colors", needsAttention ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500 animate-[pulse_3s_ease-in-out_infinite]" : "hover:bg-gray-50")}>
+                <tr key={`${row.CTE}-${idx}`} className={clsx("transition-colors", row.IS_HISTORICAL ? "bg-gray-50 opacity-75 grayscale" : (needsAttention ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500 animate-[pulse_3s_ease-in-out_infinite]" : "hover:bg-gray-50"))}>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
-                      {needsAttention && <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded animate-bounce"><AlertTriangle size={10} /> ATENÇÃO</span>}
-                      <StatusBadge status={row.STATUS_CALCULADO || row.STATUS} />
-                      <StatusBadge status={row.FRETE_PAGO} />
+                      {row.IS_HISTORICAL ? (
+                          <span className="px-2 py-1 rounded-full text-xs font-semibold border bg-gray-200 text-gray-600 border-gray-300 flex items-center gap-1">
+                              <Archive size={10} /> HISTÓRICO
+                          </span>
+                      ) : (
+                          <>
+                            {needsAttention && <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded animate-bounce"><AlertTriangle size={10} /> ATENÇÃO</span>}
+                            <StatusBadge status={row.STATUS_CALCULADO || row.STATUS} />
+                            <StatusBadge status={row.FRETE_PAGO} />
+                          </>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -425,7 +549,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                     <div className="text-xs text-gray-500">Série: {row.SERIE}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={clsx("font-bold", row.STATUS_CALCULADO === 'FORA DO PRAZO' ? 'text-red-600' : 'text-gray-700')}>{row.DATA_LIMITE_BAIXA}</span>
+                    <span className={clsx("font-bold", row.STATUS_CALCULADO === 'FORA DO PRAZO' && !row.IS_HISTORICAL ? 'text-red-600' : 'text-gray-700')}>{row.DATA_LIMITE_BAIXA || '-'}</span>
                   </td>
                   <td className="px-4 py-3 truncate max-w-xs">
                     <div className="truncate text-xs text-primary-600 font-bold uppercase mb-0.5">{row.ENTREGA}</div>
@@ -450,15 +574,23 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       <div className="md:hidden space-y-4">
         {sortedData.map((row, idx) => {
            const noteCount = getNoteCount(row.CTE);
-           const needsAttention = isCteEmBusca(row.CTE, row.SERIE, row.STATUS) && !notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase()) && !!user?.linkedDestUnit;
+           const needsAttention = isCteEmBusca(row.CTE, row.SERIE, row.STATUS) && !notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase()) && !!user?.linkedDestUnit && !row.IS_HISTORICAL;
            return (
-            <div key={`${row.CTE}-${idx}`} className={clsx("bg-white p-4 rounded-lg shadow border-l-4 transition-all", needsAttention ? "border-red-500 bg-red-50" : "border-primary-500")}>
+            <div key={`${row.CTE}-${idx}`} className={clsx("bg-white p-4 rounded-lg shadow border-l-4 transition-all", row.IS_HISTORICAL ? "border-gray-300 opacity-80" : (needsAttention ? "border-red-500 bg-red-50" : "border-primary-500"))}>
               <div className="flex justify-between items-start mb-2">
-                <div><div className="text-lg font-bold text-gray-900">CTE {row.CTE}</div><div className="text-xs text-gray-500">Série {row.SERIE}</div></div>
-                <div className="flex flex-col gap-1 items-end"><StatusBadge status={row.STATUS_CALCULADO || row.STATUS} /><StatusBadge status={row.FRETE_PAGO} /></div>
+                <div>
+                    <div className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        CTE {row.CTE} 
+                        {row.IS_HISTORICAL && <Archive size={14} className="text-gray-400"/>}
+                    </div>
+                    <div className="text-xs text-gray-500">Série {row.SERIE}</div>
+                </div>
+                <div className="flex flex-col gap-1 items-end">
+                    {row.IS_HISTORICAL ? <span className="text-xs font-bold text-gray-500">HISTÓRICO</span> : <><StatusBadge status={row.STATUS_CALCULADO || row.STATUS} /><StatusBadge status={row.FRETE_PAGO} /></>}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 mb-3 pt-2 border-t border-gray-50">
-                <div><span className="block text-xs text-gray-400">Limite</span><span className="font-bold">{row.DATA_LIMITE_BAIXA}</span></div>
+                <div><span className="block text-xs text-gray-400">Limite</span><span className="font-bold">{row.DATA_LIMITE_BAIXA || '-'}</span></div>
                 <div><span className="block text-xs text-gray-400">Valor</span><span className="font-mono font-bold">{row.VALOR_CTE}</span></div>
               </div>
               <div className="flex justify-end pt-2 border-t border-gray-50">
