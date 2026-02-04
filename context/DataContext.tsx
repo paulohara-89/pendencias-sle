@@ -146,43 +146,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isCteTad = (cte: string, serie: string) => {
       const cleanSerie = String(serie || '').replace(/^0+/, '');
       
-      // 1. Check Process Control History (Source of Truth do Backend)
+      const currentCte = baseData.find(c => c.CTE === cte && (!cleanSerie || String(c.SERIE).replace(/^0+/, '') === cleanSerie));
+      if (currentCte && (currentCte.STATUS === 'RESOLVIDO' || currentCte.STATUS === 'LOCALIZADA')) return false;
+
       let history = processControlData.filter(p => p.CTE === cte);
       if (cleanSerie) {
           history = history.filter(p => String(p.SERIE || '').replace(/^0+/, '') === cleanSerie);
       }
       
       if (history.length > 0) {
-          const latestProcess = history[history.length - 1]; // Assume ordem cronológica da planilha
+          const latestProcess = history[history.length - 1]; 
           
-          // Se estiver resolvido, não é TAD
           if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA') return false;
-          
-          // Se for explicitamente TAD
           if (latestProcess.STATUS === 'TAD') return true;
-          
-          // Workaround: Backend converte TAD para EM BUSCA
-          // Detectamos TAD pela descrição se o status for EM BUSCA
-          if (latestProcess.STATUS === 'EM BUSCA' && 
-              (latestProcess.DESCRIPTION || '').toUpperCase().includes('TAD')) return true;
+          if (latestProcess.STATUS === 'EM BUSCA' && (latestProcess.DESCRIPTION || '').toUpperCase().includes('TAD')) return true;
       }
       
-      // 2. Fallback: Check Latest Note (Source of Truth do Frontend/Anotações)
-      // Isso cobre o delay de atualização do Process Control e garante persistência se a descrição do PC falhar
       const latestNote = getLatestNote(cte);
       if (latestNote) {
-           // Se a nota diz que resolveu, então não é TAD
            if (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA') return false;
-           
-           // Se a nota tem texto de início de TAD (nossa "assinatura")
            if ((latestNote.TEXTO || '').toUpperCase().includes('TAD INICIADO')) {
-               // Verifica se não há um status de resolução posterior no baseData
-               const currentCte = baseData.find(c => c.CTE === cte && (!cleanSerie || String(c.SERIE).replace(/^0+/, '') === cleanSerie));
-               if (currentCte && (currentCte.STATUS === 'RESOLVIDO' || currentCte.STATUS === 'LOCALIZADA')) return false;
                return true;
            }
-           
-           // Se a nota tem status explícito de TAD
            if (latestNote.STATUS_BUSCA === 'TAD') return true;
       }
 
@@ -190,7 +175,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isCteEmBusca = (cte: string, serie: string, originalStatus: string) => {
-      // Prioridade: Se é TAD, não é "Apenas Em Busca"
+      if (originalStatus === 'RESOLVIDO' || originalStatus === 'LOCALIZADA') return false;
       if (isCteTad(cte, serie)) return false;
 
       const cleanSerie = String(serie || '').replace(/^0+/, '');
@@ -201,14 +186,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (history.length > 0) {
           const latestProcess = history[history.length - 1];
+          if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA') return false;
+          
           if (latestProcess.STATUS === 'EM BUSCA') return true;
-          if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA' || latestProcess.STATUS === 'TAD') return false;
+          if (latestProcess.STATUS === 'TAD') return false;
       }
       
-      // Fallback status original da planilha base ou notas
+      const latestNote = getLatestNote(cte);
+      if (latestNote && (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA')) return false;
+
       if (history.length === 0 && originalStatus === 'EM BUSCA') {
-          const latest = getLatestNote(cte);
-          if (latest && (latest.STATUS_BUSCA === 'RESOLVIDO' || latest.STATUS_BUSCA === 'LOCALIZADA')) return false;
           return true;
       }
       return false;
@@ -256,7 +243,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           else status = 'NO PRAZO';
       }
       
-      // Override visual do STATUS se for TAD detectado
       let displayStatus = item.STATUS;
       if (isCteTad(item.CTE, item.SERIE)) {
           displayStatus = 'TAD';
@@ -305,15 +291,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
      const tempID = "temp-" + Math.random().toString(36).substr(2, 9);
      
+     // 1. Determina status efetivo (respeita payload ou estado atual)
+     let effectiveStatus = notePayload.STATUS_BUSCA;
      let processStatus = "";
      let processDesc = "";
+
+     // Se o payload não trouxer status, tentamos inferir do estado atual para mantê-lo
+     if (!effectiveStatus) {
+         const cleanSerie = String(notePayload.SERIE || '').replace(/^0+/, '');
+         const item = baseData.find(c => c.CTE === notePayload.CTE && String(c.SERIE||'').replace(/^0+/,'') === cleanSerie);
+         
+         if (isCteTad(notePayload.CTE, notePayload.SERIE || '')) {
+             effectiveStatus = 'TAD';
+         } else if (item && isCteEmBusca(notePayload.CTE, notePayload.SERIE || '', item.STATUS)) {
+             effectiveStatus = 'EM BUSCA';
+         }
+     }
      
+     // Configura descrição de processo se houver mudança ou início
      if (notePayload.STATUS_BUSCA === 'EM BUSCA') {
          processStatus = "EM BUSCA";
          processDesc = "INICIADO VIA OBS: " + (notePayload.TEXTO || "Sem descrição");
      } else if (notePayload.STATUS_BUSCA === 'TAD') {
          processStatus = "TAD";
          processDesc = "TAD INICIADO: " + (notePayload.TEXTO || "Sem descrição");
+     } else if (effectiveStatus) {
+         // Se estamos apenas preservando o status (ex: add foto em TAD existente)
+         processStatus = effectiveStatus;
+         processDesc = notePayload.TEXTO || "Atualização";
      }
 
      const finalNoteLocal: NoteData = { 
@@ -324,10 +329,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          LINK_IMAGEM: "" 
      };
      
-     // Adicionamos a nota localmente com o texto formatado (processDesc) se for TAD/BUSCA
-     // Isso garante que a detecção isCteTad via getLatestNote funcione imediatamente
      if (processStatus) {
-         finalNoteLocal.TEXTO = processDesc;
+         // Se for novo TAD, usa descrição completa. Se for manutenção, usa texto do usuário.
+         if (notePayload.STATUS_BUSCA) finalNoteLocal.TEXTO = processDesc;
      }
 
      setNotes(prev => [...prev, finalNoteLocal]);
@@ -336,28 +340,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          setProcessControlData(prev => [...prev, { 
              ID: tempID, CTE: notePayload.CTE, SERIE: notePayload.SERIE || "", DATA: formattedDate, USER: notePayload.USUARIO, DESCRIPTION: processDesc, LINK: "", STATUS: processStatus 
          }]);
+         
+         if (processStatus === 'TAD' || processStatus === 'EM BUSCA') {
+             const cleanSerie = String(notePayload.SERIE || '').replace(/^0+/, '');
+             setBaseData(prev => prev.map(item => 
+                 (item.CTE === notePayload.CTE && String(item.SERIE).replace(/^0+/, '') === cleanSerie) 
+                 ? { ...item, STATUS: processStatus } 
+                 : item
+             ));
+         }
      }
      
-     // Limpeza e preparação robusta de anexos
      const cleanAttachments = (notePayload.attachments || []).map(att => {
         let base64Data = att.base64;
         const idx = base64Data.indexOf(',');
         if (idx > -1) base64Data = base64Data.substring(idx + 1);
         
         return {
-            fileName: att.name, // Compatibilidade com Apps Script padrão
+            fileName: att.name,
             name: att.name,
-            mimeType: att.type, // Compatibilidade com Apps Script padrão
+            mimeType: att.type,
             type: att.type,
-            data: base64Data,   // Compatibilidade com Apps Script padrão
+            data: base64Data,
             base64: base64Data
         };
      });
 
      try {
-         // Se for TAD, usamos a descrição enriquecida para garantir que o texto "TAD" vá para o backend
+         // CRÍTICO: Força markInSearch se houver anexos para garantir que o link seja salvo no ProcessControl
+         // Também força se o status for explicitamente EM BUSCA ou TAD
+         const shouldMarkInSearch = !!notePayload.STATUS_BUSCA || cleanAttachments.length > 0;
+         
+         // Se for novo TAD, usa descrição especial. Senão, usa texto normal.
          const textToSend = (notePayload.STATUS_BUSCA === 'TAD') ? processDesc : (notePayload.TEXTO || "Sem descrição");
-         const shouldMarkInSearch = notePayload.STATUS_BUSCA === 'EM BUSCA' || notePayload.STATUS_BUSCA === 'TAD';
 
          await postToSheet('addNote', { 
            cte: notePayload.CTE, 
@@ -365,16 +380,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            username: notePayload.USUARIO, 
            user: notePayload.USUARIO, 
            text: textToSend, 
-           image: cleanAttachments.length > 0 ? cleanAttachments[0].base64 : "", // Legacy single image
+           image: cleanAttachments.length > 0 ? cleanAttachments[0].base64 : "", 
            attachments: cleanAttachments,
            markInSearch: shouldMarkInSearch, 
-           status_busca: notePayload.STATUS_BUSCA, 
-           status: processStatus || notePayload.STATUS_BUSCA,
-           currentStatus: processStatus || notePayload.STATUS_BUSCA
+           status_busca: effectiveStatus, // Envia o status efetivo (novo ou preservado)
+           status: effectiveStatus || processStatus,
+           currentStatus: effectiveStatus || processStatus
          });
          
          setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false } : n));
-         setTimeout(() => { refreshData(); }, 2000);
+         setTimeout(() => { refreshData(); }, 3000);
      } catch (error) { console.error("Add Note Failed", error); }
   };
 
@@ -393,15 +408,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const textMsg = customText || "RESOLVIDO: Mercadoria marcada como LOCALIZADA.";
       const username = user?.username || "Sistema";
       const cleanSerie = String(targetSerie).replace(/^0+/, '');
-      setBaseData(prev => prev.map(item => (item.CTE === cte && String(item.SERIE).replace(/^0+/, '') === cleanSerie) ? { ...item, STATUS: 'RESOLVIDO' } : item));
+      
+      setBaseData(prev => prev.map(item => 
+          (item.CTE === cte && String(item.SERIE).replace(/^0+/, '') === cleanSerie) 
+          ? { ...item, STATUS: 'RESOLVIDO' } 
+          : item
+      ));
+
       const resolveNote: NoteData = { ID: "temp-resolve-" + Math.random(), CTE: cte, SERIE: targetSerie!, CODIGO: "0", DATA: formattedDate, USUARIO: username, TEXTO: textMsg, LINK_IMAGEM: "", STATUS_BUSCA: "RESOLVIDO", pending: true };
+      
       setNotes(prev => [...prev, resolveNote]);
       setProcessControlData(prev => [...prev, { ID: resolveNote.ID, CTE: cte, SERIE: targetSerie!, DATA: formattedDate, USER: username, DESCRIPTION: textMsg, LINK: "", STATUS: "RESOLVIDO" }]);
+      
       try {
-          await postToSheet('addNote', { cte: cte, serie: targetSerie, username: username, user: username, text: textMsg, markInSearch: false, status: 'RESOLVIDO', status_busca: 'RESOLVIDO' });
+          // CRÍTICO: markInSearch = true para garantir que o backend crie uma nova linha em PROCESS_CONTROL com o status RESOLVIDO
+          await postToSheet('addNote', { 
+              cte: cte, 
+              serie: targetSerie, 
+              username: username, 
+              user: username, 
+              text: textMsg, 
+              markInSearch: true, 
+              status: 'RESOLVIDO', 
+              status_busca: 'RESOLVIDO' 
+          });
+          
           await postToSheet('stopAlarm', { cte: cte, serie: targetSerie });
           alert("Situação resolvida!");
-          setTimeout(() => { refreshData(); }, 3000);
+          setTimeout(() => { refreshData(); }, 4000);
       } catch (error) { alert("Erro ao resolver."); }
   };
 
