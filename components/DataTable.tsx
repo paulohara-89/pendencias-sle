@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CteData } from '../types';
 import StatusBadge from './StatusBadge';
-import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle, CalendarCheck2, Coins, Tag, Archive } from 'lucide-react';
+import { MessageSquare, Filter, X, CheckCircle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Search, AlertTriangle, CalendarCheck2, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -31,35 +31,35 @@ interface FilterCardProps {
   selected: boolean;
   dimmed?: boolean; // New prop for visual feedback
   onClick: () => void;
-  compact?: boolean; // Unused but kept for interface compatibility if needed, we'll rely on unified sizing mostly
 }
 
-// Redesigned Filter Card: More compact, better spacing
+// Modern Filter Card (Inspired by Dashboard Design)
 const FilterCard: React.FC<FilterCardProps> = ({ label, count, color, selected, dimmed, onClick }) => (
   <div 
       onClick={onClick}
       className={clsx(
-          "rounded-md border transition-all cursor-pointer flex flex-col justify-center px-3 py-2 relative overflow-hidden group select-none h-[52px]",
+          "rounded-xl border transition-all cursor-pointer flex flex-col justify-between p-3 relative overflow-hidden group select-none h-[72px]",
           selected 
-              ? "bg-white ring-1 ring-inset shadow-sm z-10" 
-              : "bg-white border-gray-200 hover:bg-gray-50",
-          dimmed && !selected ? "opacity-50 grayscale-[0.8]" : "opacity-100"
+              ? "bg-white ring-2 ring-offset-1 z-10 scale-[1.02] shadow-md" 
+              : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50",
+          dimmed && !selected ? "opacity-50 grayscale-[0.5]" : "opacity-100"
       )}
       style={{ 
           borderColor: selected ? color : undefined, 
-          backgroundColor: selected ? `${color}08` : undefined
+          backgroundColor: selected ? `${color}10` : undefined,
+          boxShadow: selected ? `0 4px 12px -2px ${color}20` : undefined
       }}
   >
-      <div className="flex justify-between items-start w-full">
-          <span className="font-bold uppercase tracking-wider text-[9px] truncate mr-2" style={{ color: selected ? color : '#9ca3af' }}>
+      <div className="flex justify-between items-start w-full mb-1">
+          <span className="font-bold uppercase tracking-wider text-[10px] truncate mr-2" style={{ color: selected ? color : '#6b7280' }}>
               {label}
           </span>
-          {selected && <CheckCircle size={10} fill={color} className="text-white shrink-0" />}
+          {selected && <CheckCircle size={14} fill={color} className="text-white shrink-0" />}
       </div>
-      <div className="mt-0.5">
-          <span className="font-bold text-gray-800 text-sm leading-none">{count}</span>
+      <div className="flex items-baseline gap-1">
+          <span className="font-black text-gray-800 text-2xl leading-none tracking-tight">{count}</span>
       </div>
-      <div className="absolute bottom-0 left-0 h-0.5 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.2 }} />
+      <div className="absolute bottom-0 left-0 h-1 w-full transition-all" style={{ backgroundColor: color, opacity: selected ? 1 : 0.3 }} />
   </div>
 );
 
@@ -373,12 +373,12 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
       {/* Filter Section */}
       {showFilters && !globalSearch && (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 transition-opacity">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 transition-opacity">
             
             {/* Header com Unidade */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-3 mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-4 mb-5">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Filter size={18} className="text-primary-600" /> Filtros
+                    <Filter size={20} className="text-primary-600" /> Filtros Inteligentes
                 </h2>
                 <div className="w-full md:w-auto">
                     {user?.linkedDestUnit && !ignoreUnitFilter ? (
@@ -386,7 +386,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                             <Package size={14} /> <span className="font-bold text-xs">{user.linkedDestUnit}</span>
                         </div>
                     ) : (
-                        <select value={selectedUnit} onChange={(e) => setSelectedUnit(e.target.value)} className="w-full md:w-64 appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer">
+                        <select value={selectedUnit} onChange={(e) => setSelectedUnit(e.target.value)} className="w-full md:w-64 appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-3 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer shadow-sm">
                             <option value="">Todas as Unidades</option>
                             {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -394,13 +394,13 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                 </div>
             </div>
 
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-6">
                 
                 {/* BLOCO 1: STATUS (Apenas se não for visualização crítica) */}
                 {STATUS_OPTIONS.length > 0 && (
-                    <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Status do Prazo</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Status do Prazo</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
                             {STATUS_OPTIONS.map(status => (
                                 <FilterCard 
                                     key={status}
@@ -420,9 +420,9 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6">
                     
                     {/* PAGAMENTOS (6 Cols on Desktop) */}
-                    <div className="col-span-1 md:col-span-12 lg:col-span-6 space-y-1.5">
-                        <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Tipo de Pagamento</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="col-span-1 md:col-span-12 lg:col-span-6 space-y-2">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Tipo de Pagamento</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {PAYMENT_OPTIONS.map(pay => (
                                 <FilterCard 
                                     key={pay}
@@ -438,9 +438,9 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                     </div>
 
                     {/* NOTAS (3 Cols on Desktop) */}
-                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-1.5">
-                         <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Anotações</label>
-                         <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-2">
+                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Anotações</label>
+                         <div className="grid grid-cols-2 gap-3">
                             <FilterCard 
                                 label="Com Notas" count={getCount('note', 'WITH')} color={COLORS.priority} 
                                 selected={noteFilter === 'WITH'} dimmed={noteFilter !== 'ALL'}
@@ -454,27 +454,17 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
                          </div>
                     </div>
 
-                    {/* ATRIBUTOS (3 Cols on Desktop - DISCREET DESIGN) */}
-                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-1.5">
-                         <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider ml-1">Atributos</label>
-                         <div 
-                            onClick={() => setFilterTxEntrega(!filterTxEntrega)}
-                            className={clsx(
-                                "flex items-center justify-between px-3 py-2 rounded-md border transition-all cursor-pointer select-none h-[52px]",
-                                filterTxEntrega 
-                                    ? "bg-orange-50 border-orange-300 text-orange-800 ring-1 ring-orange-200 shadow-sm" 
-                                    : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                            )}
-                         >
-                             <div className="flex items-center gap-2.5">
-                                 <div className={clsx("p-1 rounded-full", filterTxEntrega ? "bg-orange-200" : "bg-gray-100")}>
-                                     {filterTxEntrega ? <CheckCircle size={14} className="text-orange-700" /> : <Coins size={14} className="text-gray-400" />}
-                                 </div>
-                                 <span className="text-[10px] font-bold uppercase tracking-wide">Com Taxa</span>
-                             </div>
-                             <span className="font-bold text-sm bg-white/50 px-2 py-0.5 rounded text-gray-700">
-                                 {getCount('txEntrega', '')}
-                             </span>
+                    {/* ATRIBUTOS (3 Cols on Desktop - HARMONIZED DESIGN) */}
+                    <div className="col-span-1 md:col-span-6 lg:col-span-3 space-y-2">
+                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Atributos</label>
+                         <div className="grid grid-cols-1">
+                            <FilterCard
+                                label="COM ENTREGA"
+                                count={getCount('txEntrega', '')}
+                                color="#f97316"
+                                selected={filterTxEntrega}
+                                onClick={() => setFilterTxEntrega(!filterTxEntrega)}
+                            />
                          </div>
                     </div>
                 </div>
