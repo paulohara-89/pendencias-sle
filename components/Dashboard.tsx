@@ -38,8 +38,9 @@ const Dashboard: React.FC = () => {
   const cleanLabel = (name: string) => {
     if (!name) return '';
     let cleaned = name.replace(/^(DEC|FILIAL)\s*-?\s*/i, '');
-    if (cleaned.length > 18) {
-      return cleaned.substring(0, 18) + '...';
+    // Increased truncate limit from 18 to 22 characters
+    if (cleaned.length > 22) {
+      return cleaned.substring(0, 22) + '...';
     }
     return cleaned;
   };
@@ -189,7 +190,8 @@ const Dashboard: React.FC = () => {
       barMap[key].total += metric;
     });
 
-    const barData = Object.values(barMap).sort((a: any, b: any) => b.total - a.total).slice(0, 20);
+    // Reduced slice from 20 to 12 to prevent overlap
+    const barData = Object.values(barMap).sort((a: any, b: any) => b.total - a.total).slice(0, 12);
 
     let pieData: { name: string, value: number, monetary: number }[] = [];
     const keys = pieMode === 'status' ? Object.keys(STATUS_COLORS) : Object.keys(PAYMENT_COLORS);
@@ -422,7 +424,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-        <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full min-h-[400px]">
+        <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full min-h-[450px]">
            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 shrink-0 gap-2">
               <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
@@ -457,7 +459,7 @@ const Dashboard: React.FC = () => {
               </div>
            </div>
            
-           <div className="flex-1 w-full min-h-[300px]">
+           <div className="flex-1 w-full min-h-[350px]">
              <ResponsiveContainer width="100%" height="100%">
                <BarChart 
                  data={chartData.barData} 
@@ -475,8 +477,8 @@ const Dashboard: React.FC = () => {
                  <YAxis 
                    dataKey="name" 
                    type="category" 
-                   width={130} 
-                   fontSize={9} 
+                   width={170} 
+                   fontSize={10} 
                    tick={{fill: '#4b5563', fontWeight: 600}}
                    interval={0}
                    onClick={handleBarClick}
@@ -491,7 +493,7 @@ const Dashboard: React.FC = () => {
                     stackId="a" 
                     fill={PAYMENT_COLORS[key]} 
                     radius={[0, 2, 2, 0]} 
-                    barSize={16} 
+                    barSize={18} 
                     onClick={handleBarClick}
                     cursor={!activeUnit ? 'pointer' : 'default'}
                    />
