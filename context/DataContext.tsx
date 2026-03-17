@@ -312,18 +312,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      let effectiveStatus = notePayload.STATUS_BUSCA;
      let processStatus = "";
      let processDesc = "";
-
-     // Se o payload não trouxer status, tentamos inferir do estado atual para mantê-lo
-     if (!effectiveStatus) {
-         const cleanSerie = String(notePayload.SERIE || '').replace(/^0+/, '');
-         const item = baseData.find(c => c.CTE === notePayload.CTE && String(c.SERIE||'').replace(/^0+/,'') === cleanSerie);
-         
-         if (isCteTad(notePayload.CTE, notePayload.SERIE || '')) {
-             effectiveStatus = 'TAD';
-         } else if (item && isCteEmBusca(notePayload.CTE, notePayload.SERIE || '', item.STATUS)) {
-             effectiveStatus = 'EM BUSCA';
-         }
-     }
      
      // Configura descrição de processo se houver mudança ou início
      if (notePayload.STATUS_BUSCA === 'EM BUSCA') {
@@ -413,13 +401,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            username: notePayload.USUARIO, 
            user: notePayload.USUARIO, 
            text: textToSend, 
-           image: cleanAttachments.length > 0 ? cleanAttachments[0].base64 : "", 
+           image: "", // Sempre envia vazio para evitar que o backend force 'EM BUSCA'
            attachments: cleanAttachments,
            markInSearch: shouldMarkInSearch, 
-           status_busca: effectiveStatus, // Envia o status efetivo (novo ou preservado)
-            isTad: notePayload.STATUS_BUSCA === 'TAD',
-           status: effectiveStatus || processStatus,
-           currentStatus: effectiveStatus || processStatus
+           status_busca: notePayload.STATUS_BUSCA, // Apenas envia se foi explicitamente marcado
+           isTad: notePayload.STATUS_BUSCA === 'TAD',
+           status: notePayload.STATUS_BUSCA,
+           currentStatus: notePayload.STATUS_BUSCA
          });
          
          setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false } : n));
