@@ -87,6 +87,20 @@ const parseISOLocal = (s: string): Date => {
     return new Date(s);
 };
 
+const parseNoteDate = (dateStr: string) => {
+    if(!dateStr) return 0;
+    try {
+        const [d, t] = dateStr.split(' ');
+        if(!d) return 0;
+        const [day, month, year] = d.split('/').map(Number);
+        if (t) {
+            const [hour, min, sec] = t.split(':').map(Number);
+            return new Date(year, month-1, day, hour, min, sec || 0).getTime();
+        }
+        return new Date(year, month-1, day).getTime();
+    } catch (e) { return 0; }
+};
+
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -123,19 +137,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getLatestNote = (cte: string) => {
       const cteNotes = notes.filter(n => n.CTE === cte);
       if (cteNotes.length === 0) return null;
-      const parseNoteDate = (dateStr: string) => {
-          if(!dateStr) return 0;
-          try {
-              const [d, t] = dateStr.split(' ');
-              if(!d) return 0;
-              const [day, month, year] = d.split('/').map(Number);
-              if (t) {
-                  const [hour, min, sec] = t.split(':').map(Number);
-                  return new Date(year, month-1, day, hour, min, sec || 0).getTime();
-              }
-              return new Date(year, month-1, day).getTime();
-          } catch (e) { return 0; }
-      };
       return cteNotes.sort((a, b) => {
           if (a.pending && !b.pending) return -1;
           if (!a.pending && b.pending) return 1;
@@ -149,6 +150,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentCte = baseData.find(c => c.CTE === cte && (!cleanSerie || String(c.SERIE).replace(/^0+/, '') === cleanSerie));
       if (currentCte && (currentCte.STATUS === 'RESOLVIDO' || currentCte.STATUS === 'LOCALIZADA')) return false;
 
+      // 1. Verifica no histórico do PROCESS_CONTROL
       let history = processControlData.filter(p => p.CTE === cte);
       if (cleanSerie) {
           history = history.filter(p => String(p.SERIE || '').replace(/^0+/, '') === cleanSerie);
@@ -159,16 +161,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           if (latestProcess.STATUS === 'RESOLVIDO' || latestProcess.STATUS === 'LOCALIZADA') return false;
           if (latestProcess.STATUS === 'TAD') return true;
-          if (latestProcess.STATUS === 'EM BUSCA' && (latestProcess.DESCRIPTION || '').toUpperCase().includes('TAD')) return true;
+          
+          // Heurística: se o status for EM BUSCA mas a descrição mencionar TAD de forma clara
+          const desc = (latestProcess.DESCRIPTION || '').toUpperCase();
+          if (latestProcess.STATUS === 'EM BUSCA' && (desc.includes('TAD') || desc.includes('T.A.D'))) return true;
       }
       
-      const latestNote = getLatestNote(cte);
+      // 2. Verifica nas notas (procurando a última nota que tenha um status definido ou texto de TAD)
+      const cteNotes = notes.filter(n => n.CTE === cte).sort((a, b) => {
+          return parseNoteDate(b.DATA) - parseNoteDate(a.DATA);
+      });
+
+      // Procura a nota mais recente que tenha alterado o status
+      const latestStatusNote = cteNotes.find(n => n.STATUS_BUSCA);
+      if (latestStatusNote) {
+          if (latestStatusNote.STATUS_BUSCA === 'RESOLVIDO' || latestStatusNote.STATUS_BUSCA === 'LOCALIZADA') return false;
+          if (latestStatusNote.STATUS_BUSCA === 'TAD') return true;
+      }
+
+      // Heurística de texto na nota mais recente (independente de ter status_busca preenchido)
+      const latestNote = cteNotes[0];
       if (latestNote) {
-           if (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA') return false;
-           if ((latestNote.TEXTO || '').toUpperCase().includes('TAD INICIADO')) {
-               return true;
-           }
-           if (latestNote.STATUS_BUSCA === 'TAD') return true;
+          const text = (latestNote.TEXTO || '').toUpperCase();
+          if (text.includes('TAD INICIADO') || text.includes('MARCADO COMO TAD') || text.includes('PROCESSO DE TAD')) {
+              return true;
+          }
       }
 
       return false;
@@ -310,15 +327,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      
      // Configura descrição de processo se houver mudança ou início
      if (notePayload.STATUS_BUSCA === 'EM BUSCA') {
-         processStatus = "EM BUSCA";
-         processDesc = "INICIADO VIA OBS: " + (notePayload.TEXTO || "Sem descrição");
+         // Verifica se JÁ está em busca para não registrar como INICIADO novamente
+         const cleanSerie = String(notePayload.SERIE || '').replace(/^0+/, '');
+         const item = baseData.find(c => c.CTE === notePayload.CTE && String(c.SERIE||'').replace(/^0+/,'') === cleanSerie);
+         
+         if (isCteEmBusca(notePayload.CTE, notePayload.SERIE || '', item?.STATUS || '')) {
+             processStatus = "EM BUSCA";
+             processDesc = notePayload.TEXTO || "Atualização";
+         } else {
+             processStatus = "EM BUSCA";
+             processDesc = "INICIADO VIA OBS: " + (notePayload.TEXTO || "Sem descrição");
+         }
      } else if (notePayload.STATUS_BUSCA === 'TAD') {
-         processStatus = "TAD";
-         processDesc = "TAD INICIADO: " + (notePayload.TEXTO || "Sem descrição");
+         // Verifica se JÁ está em TAD para não registrar como INICIADO novamente
+         if (isCteTad(notePayload.CTE, notePayload.SERIE || '')) {
+             processStatus = "TAD";
+             processDesc = notePayload.TEXTO || "Atualização TAD";
+         } else {
+             processStatus = "TAD";
+             processDesc = "TAD INICIADO: " + (notePayload.TEXTO || "Sem descrição");
+         }
      } else if (effectiveStatus) {
          // Se estamos apenas preservando o status (ex: add foto em TAD existente)
-         processStatus = effectiveStatus;
-         processDesc = notePayload.TEXTO || "Atualização";
+         // processStatus = effectiveStatus;
+         // processDesc = notePayload.TEXTO || "Atualização";
      }
 
      const finalNoteLocal: NoteData = { 
@@ -330,7 +362,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      };
      
      if (processStatus) {
-         // Se for novo TAD, usa descrição completa. Se for manutenção, usa texto do usuário.
+         // Se for novo TAD/EmBusca, usa descrição completa. Se for manutenção, usa texto do usuário.
          if (notePayload.STATUS_BUSCA) finalNoteLocal.TEXTO = processDesc;
      }
 
@@ -367,12 +399,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      });
 
      try {
-         // CRÍTICO: Força markInSearch se houver anexos para garantir que o link seja salvo no ProcessControl
-         // Também força se o status for explicitamente EM BUSCA ou TAD
-         const shouldMarkInSearch = !!notePayload.STATUS_BUSCA || cleanAttachments.length > 0;
+         // CRÍTICO: markInSearch aciona o alerta de EM BUSCA no backend.
+         const shouldMarkInSearch = notePayload.STATUS_BUSCA === 'EM BUSCA';
          
          // Se for novo TAD, usa descrição especial. Senão, usa texto normal.
-         const textToSend = (notePayload.STATUS_BUSCA === 'TAD') ? processDesc : (notePayload.TEXTO || "Sem descrição");
+         const textToSend = (notePayload.STATUS_BUSCA === 'TAD' && !isCteTad(notePayload.CTE, notePayload.SERIE || '')) 
+            ? processDesc 
+            : (notePayload.TEXTO || "Sem descrição");
 
          await postToSheet('addNote', { 
            cte: notePayload.CTE, 
@@ -384,6 +417,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            attachments: cleanAttachments,
            markInSearch: shouldMarkInSearch, 
            status_busca: effectiveStatus, // Envia o status efetivo (novo ou preservado)
+            isTad: notePayload.STATUS_BUSCA === 'TAD',
            status: effectiveStatus || processStatus,
            currentStatus: effectiveStatus || processStatus
          });
@@ -429,6 +463,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               user: username, 
               text: textMsg, 
               markInSearch: true, 
+              isTad: false, 
               status: 'RESOLVIDO', 
               status_busca: 'RESOLVIDO' 
           });

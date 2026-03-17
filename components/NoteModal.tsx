@@ -227,11 +227,14 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
 
     setIsSending(true);
     try {
+      // Logic Fix: Ensure we preserve the current status if we are just adding an attachment
+      let statusPayload = isSearch ? 'EM BUSCA' : (isTad ? 'TAD' : '');
+      
       await addNote({
         CTE: cte.CTE, SERIE: cte.SERIE || '', CODIGO: cte.CODIGO, DATA: '', 
         USUARIO: user?.username || 'Sistema', TEXTO: text || (pendingFiles.length > 0 ? "Anexo enviado" : ""), 
         LINK_IMAGEM: '', 
-        STATUS_BUSCA: isSearch ? 'EM BUSCA' : (isTad ? 'TAD' : ''), 
+        STATUS_BUSCA: statusPayload, 
         attachments: pendingFiles
       });
       setText(''); setIsSearch(false); setIsTad(false); setPendingFiles([]);
