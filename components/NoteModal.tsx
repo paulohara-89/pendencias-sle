@@ -101,24 +101,29 @@ const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, onImageClick }) 
   const fileId = getFileIdFromUrl(url);
   const mimeType = detectMimeType(url);
   const isGoogleDrive = !!fileId;
+  const [showPreview, setShowPreview] = React.useState(false);
 
   if (isGoogleDrive) {
       return (
           <div className="media-container drive-container bg-white p-2 rounded-lg border border-gray-200 mt-2">
-               <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wide">
-                      <FileIcon size={14} className="text-primary-600" /> Arquivo no Drive
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wide cursor-pointer" onClick={() => setShowPreview(!showPreview)}>
+                      <FileIcon size={14} className="text-primary-600" /> {showPreview ? 'Ocultar Drive Preview' : 'Exibir Drive Preview'}
                   </div>
-                  <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800" title="Abrir em nova aba">
-                      <ExternalLink size={14} />
-                  </a>
+                  <div className="flex gap-2">
+                      <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 flex items-center gap-1 rounded text-xs font-bold" title="Abrir em nova aba">
+                          <ExternalLink size={14} /> Abrir
+                      </a>
+                  </div>
                </div>
-               <iframe 
-                 src={`https://drive.google.com/file/d/${fileId}/preview`} 
-                 className="w-full h-[350px] border border-gray-300 rounded bg-white"
-                 allow="autoplay"
-                 title="Drive Preview"
-               ></iframe>
+               {showPreview && (
+                   <iframe 
+                     src={`https://drive.google.com/file/d/${fileId}/preview`} 
+                     className="w-full h-[350px] border border-gray-300 rounded bg-white mt-2"
+                     allow="autoplay"
+                     title="Drive Preview"
+                   ></iframe>
+               )}
           </div>
       );
   }
@@ -183,6 +188,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [resolveChecked, setResolveChecked] = useState(false);
   const [showConfirmResolve, setShowConfirmResolve] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   if (!cte) return null;
@@ -203,38 +209,41 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      const newFiles: PendingFile[] = [];
-      const filesArr: File[] = Array.from(event.target.files);
-      for (const file of filesArr) {
-          try {
-              let base64 = "";
-              const isImage = file.type.startsWith('image/') || !!file.name.match(/\.(jpg|jpeg|png|webp|heic|heif)$/i);
-              
-              if (isImage) {
-                  try {
-                      base64 = await compressImage(file);
-                  } catch (e) {
-                      console.warn('Compression failed or not supported for this image type. Using original.', e);
-                      // Fallback size check (e.g. 5MB limit for uncompressed images like HEIC)
+      setIsConverting(true);
+      try {
+          const newFiles: PendingFile[] = [];
+          const filesArr: File[] = Array.from(event.target.files);
+          for (const file of filesArr) {
+              try {
+                  let base64 = "";
+                  const isImage = file.type.startsWith('image/') || !!file.name.match(/\.(jpg|jpeg|png|webp|heic|heif)$/i);
+                  
+                  if (isImage) {
+                      try {
+                          base64 = await compressImage(file);
+                      } catch (e) {
+                          console.warn('Compression failed or not supported for this image type. Using original.', e);
+                          if (file.size > 5 * 1024 * 1024) {
+                              alert(`Imagem ${file.name} é  muito grande (${(file.size/1024/1024).toFixed(1)}MB) e não pôde ser comprimida. Limite é 5MB.`);
+                              continue;
+                          }
+                          base64 = await fileToBase64(file);
+                      }
+                  } else {
                       if (file.size > 5 * 1024 * 1024) {
-                          alert(`Imagem ${file.name} é  muito grande (${(file.size/1024/1024).toFixed(1)}MB) e não pôde ser comprimida. Limite é 5MB.`);
+                          alert(`Arquivo ${file.name} excede o limite de 5MB para anexos.`);
                           continue;
                       }
                       base64 = await fileToBase64(file);
                   }
-              } else {
-                  // Non-image file size check (limit 5MB)
-                  if (file.size > 5 * 1024 * 1024) {
-                      alert(`Arquivo ${file.name} excede o limite de 5MB para anexos.`);
-                      continue;
-                  }
-                  base64 = await fileToBase64(file);
-              }
-              newFiles.push({ name: file.name, type: file.type || (isImage ? 'image/jpeg' : 'application/octet-stream'), base64: base64 });
-          } catch (e) { alert(`Erro ao processar: ${file.name}`); }
+                  newFiles.push({ name: file.name, type: file.type || (isImage ? 'image/jpeg' : 'application/octet-stream'), base64: base64 });
+              } catch (e) { alert(`Erro ao processar: ${file.name}`); }
+          }
+          setPendingFiles(prev => [...prev, ...newFiles]);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      } finally {
+          setIsConverting(false);
       }
-      setPendingFiles(prev => [...prev, ...newFiles]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -459,8 +468,10 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 className="hidden" 
             />
-            <button type="button" onClick={handleUploadClick} disabled={isSending} className={clsx("p-2.5 rounded-full transition-colors", pendingFiles.length > 0 ? "bg-primary-50 text-primary-600 shadow-sm" : "text-slate-400 hover:bg-slate-100")}><Paperclip size={20} /></button>
-            <button type="submit" disabled={isSending || (!text.trim() && pendingFiles.length === 0)} className="bg-primary-600 text-white p-2.5 rounded-full hover:bg-primary-700 disabled:opacity-50 shadow-lg shadow-primary-500/20 active:scale-95 transition-all">
+            <button type="button" onClick={handleUploadClick} disabled={isSending || isConverting} className={clsx("p-2.5 rounded-full transition-colors flex items-center justify-center min-w-[40px] min-h-[40px]", pendingFiles.length > 0 ? "bg-primary-50 text-primary-600 shadow-sm" : "text-slate-400 hover:bg-slate-100")}>
+                {isConverting ? <Loader2 size={20} className="animate-spin" /> : <Paperclip size={20} />}
+            </button>
+            <button type="submit" disabled={isSending || isConverting || (!text.trim() && pendingFiles.length === 0)} className="bg-primary-600 text-white p-2.5 rounded-full hover:bg-primary-700 disabled:opacity-50 shadow-lg shadow-primary-500/20 active:scale-95 transition-all">
               {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
           </div>
@@ -470,4 +481,4 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
   );
 };
 
-export default NoteModal;
+export default React.memo(NoteModal);

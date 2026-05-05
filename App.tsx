@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider as GlobalDataProvider, useData } from './context/DataContext';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import DataTable from './components/DataTable';
-import NoteModal from './components/NoteModal';
-import ChangePassword from './components/ChangePassword';
 import AlertOverlay from './components/AlertOverlay';
-import Settings from './components/Settings';
 import { Page, CteData } from './types';
+
+const NoteModal = lazy(() => import('./components/NoteModal'));
+const ChangePassword = lazy(() => import('./components/ChangePassword'));
+const Settings = lazy(() => import('./components/Settings'));
 
 const AppContent: React.FC = () => {
   const { user, logout } = useAuth();
@@ -97,13 +98,17 @@ const AppContent: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
            <div className="max-w-7xl mx-auto w-full">
-             {renderPage()}
+             <Suspense fallback={<div className="flex h-[50vh] items-center justify-center"><div className="w-8 h-8 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin"></div></div>}>
+               {renderPage()}
+             </Suspense>
            </div>
         </div>
       </main>
 
       {selectedCte && (
-        <NoteModal cte={selectedCte} onClose={() => setSelectedCte(null)} />
+        <Suspense fallback={null}>
+          <NoteModal cte={selectedCte} onClose={() => setSelectedCte(null)} />
+        </Suspense>
       )}
     </div>
   );

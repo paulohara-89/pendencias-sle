@@ -73,10 +73,23 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
   const [paymentFilters, setPaymentFilters] = useState<string[]>([]);
   const [noteFilter, setNoteFilter] = useState<'ALL' | 'WITH' | 'WITHOUT'>('ALL');
   const [filterTxEntrega, setFilterTxEntrega] = useState(false);
+  const [globalSearchInput, setGlobalSearchInput] = useState('');
   const [globalSearch, setGlobalSearch] = useState('');
-  
-  // --- Sort State ---
+
+  // Debounce globalSearchInput into globalSearch
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setGlobalSearch(globalSearchInput);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [globalSearchInput]);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'DATA_LIMITE_DATE', direction: 'asc' });
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  // Reset limit when filters change
+  React.useEffect(() => {
+    setVisibleCount(50);
+  }, [globalSearch, statusFilters, paymentFilters, noteFilter, filterTxEntrega, selectedUnit]);
 
   // --- Constants ---
   const STATUS_OPTIONS = useMemo(() => {
@@ -362,16 +375,17 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
            </div>
            <input 
               type="text"
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
+              value={globalSearchInput}
+              onChange={(e) => setGlobalSearchInput(e.target.value)}
               placeholder="Busca Global (CTE, Destinatário, Unidade)..."
               className={clsx(
                   "w-full pl-10 pr-4 py-3 rounded-lg border focus:ring-2 focus:ring-primary-500 outline-none transition-all shadow-sm text-gray-900",
-                  globalSearch ? "bg-primary-50 border-primary-300 ring-2 ring-primary-100" : "bg-white border-gray-200"
+                  globalSearchInput ? "bg-primary-50 border-primary-300 ring-2 ring-primary-100" : "bg-white border-gray-200"
               )}
            />
-           {globalSearch && (
-               <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+           {globalSearchInput && (
+               <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
+                   <button onClick={() => { setGlobalSearch(''); setGlobalSearchInput(''); }} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
                    <span className="text-xs font-bold text-primary-600 bg-primary-100 px-2 py-0.5 rounded-full">Global Mode</span>
                </div>
            )}
@@ -527,7 +541,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sortedData.map((row, idx) => {
+            {sortedData.slice(0, visibleCount).map((row, idx) => {
               const noteCount = getNoteCount(row.CTE);
               const isEmBusca = isCteEmBusca(row.CTE, row.SERIE, row.STATUS);
               const userHasInteracted = notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase());
@@ -578,7 +592,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
 
       {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
-        {sortedData.map((row, idx) => {
+        {sortedData.slice(0, visibleCount).map((row, idx) => {
            const noteCount = getNoteCount(row.CTE);
            const needsAttention = isCteEmBusca(row.CTE, row.SERIE, row.STATUS) && !notes.some(n => n.CTE === row.CTE && n.USUARIO.toLowerCase() === user?.username.toLowerCase()) && !!user?.linkedDestUnit && !row.IS_HISTORICAL;
            return (
@@ -609,8 +623,19 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
            );
         })}
       </div>
+      
+      {visibleCount < sortedData.length && (
+         <div className="mt-6 flex justify-center">
+            <button 
+              onClick={() => setVisibleCount(v => v + 50)} 
+              className="bg-white border text-primary-600 hover:bg-primary-50 px-6 py-2 rounded-full font-bold shadow-sm transition-all text-sm"
+            >
+               Carregar Mais ({visibleCount} de {sortedData.length})
+            </button>
+         </div>
+      )}
     </div>
   );
 };
 
-export default DataTable;
+export default React.memo(DataTable);

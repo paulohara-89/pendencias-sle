@@ -126,7 +126,15 @@ const normalizeProcess = (raw: any[]): ProcessData[] => {
   })).filter(p => p.ID);
 };
 
-export const fetchSheetData = async () => {
+let globalSheetCache: any = null;
+let lastCacheTime = 0;
+const CACHE_TTL = 10000; // 10 seconds
+
+export const fetchSheetData = async (forceRefresh = false) => {
+  if (!forceRefresh && globalSheetCache && Date.now() - lastCacheTime < CACHE_TTL) {
+     return globalSheetCache;
+  }
+
   try {
       const [baseRaw, notesRaw, usersRaw, profilesRaw, globalRaw, processRaw] = await Promise.all([
         fetchCsv<any>(URLS.BASE),
@@ -153,7 +161,12 @@ export const fetchSheetData = async () => {
           data.deadlineDays = isNaN(days) ? 2 : days;
       }
 
-      return { base, notes, users, profiles, data, process };
+      const resultPayload = { base, notes, users, profiles, data, process };
+      
+      globalSheetCache = resultPayload;
+      lastCacheTime = Date.now();
+      
+      return resultPayload;
   } catch (err) {
       console.error("Falha crítica ao carregar dados:", err);
       // Retorna estrutura vazia em caso de falha total para não quebrar a UI

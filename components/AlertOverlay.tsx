@@ -137,4 +137,4 @@ const AlertOverlay: React.FC<Props> = ({ onOpenCte }) => {
   );
 };
 
-export default AlertOverlay;
+export default React.memo(AlertOverlay);

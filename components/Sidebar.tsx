@@ -134,4 +134,4 @@ const Sidebar: React.FC<Props> = ({ currentPage, setPage, logout }) => {
   );
 };
 
-export default Sidebar;
+export default React.memo(Sidebar);

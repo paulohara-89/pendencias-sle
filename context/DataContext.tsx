@@ -161,20 +161,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [fullData, setFullData] = useState<CteData[]>([]);
   const [counts, setCounts] = useState<KPICounts>({ pendencias: 0, criticos: 0, emBusca: 0, tad: 0 });
 
-  const refreshData = async () => {
-    setLoading(true);
+  const refreshData = async (force = false) => {
+    if (baseData.length === 0) setLoading(true);
     try {
-      const result = await fetchSheetData();
+      const result = await fetchSheetData(force);
       setBaseData(result.base);
       
       setNotes(prev => {
-          const fetchedIds = new Set(result.notes.map(n => String(n.ID)));
+          const fetchedIds = new Set(result.notes.map((n: any) => String(n.ID)));
           const missingLocalNotes = prev.filter(n => !fetchedIds.has(String(n.ID)));
           return [...result.notes, ...missingLocalNotes];
       });
 
       setProcessControlData(prev => {
-          const fetchedIds = new Set((result.process || []).map(p => String(p.ID)));
+          const fetchedIds = new Set((result.process || []).map((p: any) => String(p.ID)));
           const missingLocalProcess = prev.filter(p => p.ID && !fetchedIds.has(String(p.ID)));
           return [...(result.process || []), ...missingLocalProcess];
       });
@@ -466,9 +466,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            currentStatus: notePayload.STATUS_BUSCA
          };
 
-         console.log("DEBUG selectedFiles length", notePayload.attachments?.length);
-         console.log("DEBUG attachmentsToSend", cleanAttachments);
-         console.log("DEBUG addNote payload", payloadToSend);
+         // console.log("DEBUG selectedFiles length", notePayload.attachments?.length);
+         // console.log("DEBUG attachmentsToSend", cleanAttachments);
+         // console.log("DEBUG addNote payload", payloadToSend);
 
          if (notePayload.attachments && notePayload.attachments.length > 0 && cleanAttachments.length === 0) {
              throw new Error("Arquivo selecionado, mas nenhum anexo foi convertido para Base64.");
@@ -476,10 +476,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
          const backendResult = await postToSheet('addNote', payloadToSend);
 
-         console.log("DEBUG addNote result", backendResult);
+         // console.log("DEBUG addNote result", backendResult);
          
          const attachmentLinks = extractAttachmentLinks(backendResult);
-         console.log("DEBUG extracted links", attachmentLinks);
+         // console.log("DEBUG extracted links", attachmentLinks);
 
          if (cleanAttachments.length > 0 && attachmentLinks.length === 0) {
             console.error("Resposta completa do backend sem link:", backendResult);
@@ -490,8 +490,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
          setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false, LINK_IMAGEM: finalLinksString } : n));
          
-         // Trigger refresh to fetch actual server records cleanly
-         setTimeout(() => { refreshData(); }, 1500);
+         // Trigger refresh to fetch actual server records cleanly - NO LONGER NEEDED, updated locally
      } catch (error) { 
          console.error("Add Note Failed", error); 
          setNotes(prev => prev.filter(n => n.ID !== tempID)); // Remove a nota pendente se falhar
@@ -541,9 +540,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           
           await postToSheet('stopAlarm', { cte: cte, serie: targetSerie });
+          setNotes(prev => prev.map(n => n.ID === resolveNote.ID ? { ...n, pending: false } : n));
           alert("Situação resolvida!");
-          setTimeout(() => { refreshData(); }, 4000);
-      } catch (error) { alert("Erro ao resolver."); }
+      } catch (error) { 
+          alert("Erro ao resolver."); 
+          setNotes(prev => prev.filter(n => n.ID !== resolveNote.ID));
+      }
   };
 
   const addUser = async (u: UserData) => {
