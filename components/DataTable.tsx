@@ -485,10 +485,14 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       <div className="flex justify-between items-center mb-4 mt-6">
         <h2 className="text-xl font-bold text-primary-900">{title} <span className="text-gray-400 text-sm font-normal">({filteredData.length})</span></h2>
         <button onClick={() => {
-            const exportData = sortedData.map(d => ({
-                CTE: d.CTE, SERIE: d.SERIE, DATA_EMISSAO: d.DATA_EMISSAO, DATA_LIMITE: d.DATA_LIMITE_BAIXA,
-                STATUS: d.STATUS_CALCULADO || d.STATUS, UNIDADE: d.ENTREGA, CLIENTE: d.DESTINATARIO, VALOR: d.VALOR_CTE
-            }));
+            const exportData = sortedData.map(d => {
+                const latestNote = getLatestNote(d.CTE);
+                return {
+                    CTE: d.CTE, SERIE: d.SERIE, DATA_EMISSAO: d.DATA_EMISSAO, DATA_LIMITE: d.DATA_LIMITE_BAIXA,
+                    STATUS: d.STATUS_CALCULADO || d.STATUS, UNIDADE: d.ENTREGA, CLIENTE: d.DESTINATARIO, VALOR: d.VALOR_CTE,
+                    ULTIMA_ANOTACAO: latestNote?.TEXTO || ''
+                };
+            });
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Dados");

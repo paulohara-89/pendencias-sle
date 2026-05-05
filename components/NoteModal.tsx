@@ -36,28 +36,39 @@ const detectMimeType = (url: string): string => {
 
 const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 1000;
-                const scaleSize = MAX_WIDTH / img.width;
-                const newWidth = (img.width > MAX_WIDTH) ? MAX_WIDTH : img.width;
-                const newHeight = (img.width > MAX_WIDTH) ? img.height * scaleSize : img.height;
-                canvas.width = newWidth;
-                canvas.height = newHeight;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) { reject('Canvas context failed'); return; }
-                ctx.drawImage(img, 0, 0, newWidth, newHeight);
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-                resolve(compressedBase64);
-            };
-            img.onerror = (err) => reject(err);
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1000;
+            const MAX_HEIGHT = 1000;
+            let newWidth = img.width;
+            let newHeight = img.height;
+
+            if (newWidth > MAX_WIDTH) {
+                newHeight = (newHeight * MAX_WIDTH) / newWidth;
+                newWidth = MAX_WIDTH;
+            }
+            if (newHeight > MAX_HEIGHT) {
+                newWidth = (newWidth * MAX_HEIGHT) / newHeight;
+                newHeight = MAX_HEIGHT;
+            }
+
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { reject('Canvas context failed'); return; }
+            ctx.drawImage(img, 0, 0, newWidth, newHeight);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            resolve(compressedBase64);
         };
-        reader.onerror = (err) => reject(err);
+        img.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+        };
+        img.src = objectUrl;
     });
 };
 
@@ -197,12 +208,14 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
       for (const file of filesArr) {
           try {
               let base64 = "";
-              if (file.type.startsWith('image/')) {
+              const isImage = file.type.startsWith('image/') || !!file.name.match(/\.(jpg|jpeg|png|webp|heic|heif)$/i);
+              
+              if (isImage) {
                   base64 = await compressImage(file);
               } else {
                   base64 = await fileToBase64(file);
               }
-              newFiles.push({ name: file.name, type: file.type, base64: base64 });
+              newFiles.push({ name: file.name, type: file.type || (isImage ? 'image/jpeg' : 'application/octet-stream'), base64: base64 });
           } catch (e) { alert(`Erro ao processar: ${file.name}`); }
       }
       setPendingFiles(prev => [...prev, ...newFiles]);
@@ -423,7 +436,14 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
                 className="flex-1 bg-slate-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none resize-none max-h-[100px] placeholder-slate-400 focus:bg-white focus:ring-1 focus:ring-primary-500"
                 style={{ fieldSizing: 'content' } as any} 
             />
-            <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+            <input 
+                type="file" 
+                multiple 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                className="hidden" 
+            />
             <button type="button" onClick={handleUploadClick} disabled={isSending} className={clsx("p-2.5 rounded-full transition-colors", pendingFiles.length > 0 ? "bg-primary-50 text-primary-600 shadow-sm" : "text-slate-400 hover:bg-slate-100")}><Paperclip size={20} /></button>
             <button type="submit" disabled={isSending || (!text.trim() && pendingFiles.length === 0)} className="bg-primary-600 text-white p-2.5 rounded-full hover:bg-primary-700 disabled:opacity-50 shadow-lg shadow-primary-500/20 active:scale-95 transition-all">
               {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
