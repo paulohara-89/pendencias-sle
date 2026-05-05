@@ -104,41 +104,45 @@ const parseNoteDate = (dateStr: string) => {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 function extractAttachmentLinks(result: any) {
-  const data = result.data || {};
+  const candidates: string[] = [];
 
-  const links =
-    result.attachmentLinks ||
-    data.attachmentLinks ||
-    result.urls ||
-    data.urls ||
-    [];
+  function addFrom(obj: any) {
+    if (!obj || typeof obj !== "object") return;
 
-  const imageUrl =
-    result.imageUrl ||
-    data.imageUrl ||
-    result.finalStringArgs ||
-    data.finalStringArgs ||
-    result.url ||
-    data.url ||
-    result.viewUrl ||
-    data.viewUrl ||
-    "";
+    if (Array.isArray(obj.attachmentLinks)) candidates.push(...obj.attachmentLinks);
+    if (Array.isArray(obj.urls)) candidates.push(...obj.urls);
+    if (Array.isArray(obj.attachments)) {
+      obj.attachments.forEach((item: any) => {
+        if (typeof item === "string") candidates.push(item);
+        else if (item && typeof item === "object") {
+          candidates.push(item.url, item.viewUrl, item.openUrl, item.downloadUrl, item.imageUrl, item.link);
+        }
+      });
+    }
 
-  const finalLinks: string[] = [];
-
-  if (Array.isArray(links)) {
-    finalLinks.push(...links);
+    candidates.push(
+      obj.imageUrl,
+      obj.finalStringArgs,
+      obj.url,
+      obj.viewUrl,
+      obj.openUrl,
+      obj.downloadUrl,
+      obj.link,
+      obj.LINK_IMAGEM
+    );
   }
 
-  if (typeof imageUrl === "string" && imageUrl.trim()) {
-    imageUrl
-      .split(/\s,\s|,\s|\s,|\|/)
-      .map((v: string) => v.trim())
-      .filter((v: string) => v.startsWith("http"))
-      .forEach((v: string) => finalLinks.push(v));
-  }
+  addFrom(result);
+  addFrom(result?.data);
+  addFrom(result?.data?.data);
 
-  return [...new Set(finalLinks)];
+  return [...new Set(
+    candidates
+      .filter(Boolean)
+      .flatMap(v => String(v).split(/\s,\s|,\s|\s,|\|/))
+      .map(v => v.trim())
+      .filter(v => /^https?:\/\//i.test(v))
+  )];
 }
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -445,12 +449,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ? processDesc 
             : (notePayload.TEXTO || "Sem descrição");
 
-         const backendResult = await postToSheet('addNote', { 
+         const payloadToSend = { 
            cte: notePayload.CTE, 
+           cteNumber: notePayload.CTE,
            serie: notePayload.SERIE || "", 
            username: notePayload.USUARIO, 
            user: notePayload.USUARIO, 
-           text: textToSend, 
+           text: textToSend,
+           description: textToSend,
            image: "", // Sempre envia vazio para evitar que o backend force 'EM BUSCA'
            attachments: cleanAttachments,
            markInSearch: shouldMarkInSearch, 
@@ -458,11 +464,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            isTad: notePayload.STATUS_BUSCA === 'TAD',
            status: notePayload.STATUS_BUSCA,
            currentStatus: notePayload.STATUS_BUSCA
-         });
+         };
 
+         console.log("DEBUG selectedFiles length", notePayload.attachments?.length);
+         console.log("DEBUG attachmentsToSend", cleanAttachments);
+         console.log("DEBUG addNote payload", payloadToSend);
+
+         if (notePayload.attachments && notePayload.attachments.length > 0 && cleanAttachments.length === 0) {
+             throw new Error("Arquivo selecionado, mas nenhum anexo foi convertido para Base64.");
+         }
+
+         const backendResult = await postToSheet('addNote', payloadToSend);
+
+         console.log("DEBUG addNote result", backendResult);
+         
          const attachmentLinks = extractAttachmentLinks(backendResult);
+         console.log("DEBUG extracted links", attachmentLinks);
 
          if (cleanAttachments.length > 0 && attachmentLinks.length === 0) {
+            console.error("Resposta completa do backend sem link:", backendResult);
             throw new Error("O backend respondeu sucesso, mas não retornou link do anexo.");
          }
          
