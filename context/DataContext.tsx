@@ -43,7 +43,7 @@ interface DataContextType {
   isCteEmBusca: (cte: string, serie: string, originalStatus: string) => boolean;
   isCteTad: (cte: string, serie: string) => boolean;
   counts: KPICounts;
-  getLatestNote: (cte: string) => NoteData | null;
+  getLatestNote: (cte: string, serie?: string) => NoteData | null;
 }
 
 const isValid = (d: any): boolean => d instanceof Date && !isNaN(d.getTime());
@@ -134,8 +134,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => { refreshData(); }, []);
 
-  const getLatestNote = (cte: string) => {
-      const cteNotes = notes.filter(n => n.CTE === cte);
+  const getLatestNote = (cte: string, serie?: string) => {
+      let cteNotes = notes.filter(n => n.CTE === cte);
+      if (serie) {
+          const cleanSerie = String(serie).replace(/^0+/, '');
+          const withSerieMatch = cteNotes.filter(n => String(n.SERIE || '').replace(/^0+/, '') === cleanSerie);
+          if (withSerieMatch.length > 0) cteNotes = withSerieMatch;
+      }
       if (cteNotes.length === 0) return null;
       return cteNotes.sort((a, b) => {
           if (a.pending && !b.pending) return -1;
@@ -372,17 +377,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      }
      
      const cleanAttachments = (notePayload.attachments || []).map(att => {
-        let base64Data = att.base64;
-        const idx = base64Data.indexOf(',');
-        if (idx > -1) base64Data = base64Data.substring(idx + 1);
-        
         return {
             fileName: att.name,
             name: att.name,
             mimeType: att.type,
             type: att.type,
-            data: base64Data,
-            base64: base64Data
+            data: att.base64,
+            base64: att.base64
         };
      });
 
@@ -412,7 +413,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          
          setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false } : n));
          setTimeout(() => { refreshData(); }, 3000);
-     } catch (error) { console.error("Add Note Failed", error); }
+     } catch (error) { 
+         console.error("Add Note Failed", error); 
+         setNotes(prev => prev.filter(n => n.ID !== tempID)); // Remove a nota pendente se falhar
+         throw error; // Repassa o erro para o NoteModal
+     }
   };
 
   const deleteNote = async (id: string) => {

@@ -121,7 +121,15 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     return list.includes(item) ? list.filter(i => i !== item) : [...list, item];
   };
 
-  const getNoteCount = (cte: string) => notes.filter(n => n.CTE === cte).length;
+  const noteCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    notes.forEach(n => {
+      map.set(n.CTE, (map.get(n.CTE) || 0) + 1);
+    });
+    return map;
+  }, [notes]);
+
+  const getNoteCount = (cte: string) => noteCountMap.get(cte) || 0;
 
   const parseCurrency = (value: string) => {
     if (!value) return 0;
@@ -177,7 +185,8 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         const matchedCtesInHistory = new Set<string>();
         
         // Helper to check if CTE is already in active results
-        const isAlreadyActive = (cte: string) => activeMatches.some(a => a.CTE === cte);
+        const activeCtesSet = new Set(activeMatches.map(a => a.CTE));
+        const isAlreadyActive = (cte: string) => activeCtesSet.has(cte);
 
         processControlData.forEach(p => {
              if (p.CTE.includes(term) && !isAlreadyActive(p.CTE)) {
@@ -245,9 +254,10 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
     if (paymentFilters.length > 0) result = result.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
     
     if (noteFilter !== 'ALL') {
+      const ctesWithNotes = new Set(notes.map(n => n.CTE));
       result = result.filter(d => {
-        const count = getNoteCount(d.CTE);
-        return noteFilter === 'WITH' ? count > 0 : count === 0;
+        const hasNotes = ctesWithNotes.has(d.CTE);
+        return noteFilter === 'WITH' ? hasNotes : !hasNotes;
       });
     }
 
@@ -305,9 +315,10 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       if (filterType !== 'status' && statusFilters.length > 0) base = base.filter(d => statusFilters.includes(d.STATUS_CALCULADO || ''));
       if (filterType !== 'payment' && paymentFilters.length > 0) base = base.filter(d => paymentFilters.includes(d.FRETE_PAGO || ''));
       if (filterType !== 'note' && noteFilter !== 'ALL') {
+          const ctesWithNotes = new Set(notes.map(n => n.CTE));
           base = base.filter(d => {
-              const count = getNoteCount(d.CTE);
-              return noteFilter === 'WITH' ? count > 0 : count === 0;
+              const hasNotes = ctesWithNotes.has(d.CTE);
+              return noteFilter === 'WITH' ? hasNotes : !hasNotes;
           });
       }
       if (filterType !== 'txEntrega' && filterTxEntrega) base = base.filter(d => parseCurrency(d.TX_ENTREGA) > 0);
@@ -315,9 +326,10 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
       if (filterType === 'status') return base.filter(d => d.STATUS_CALCULADO === key).length;
       if (filterType === 'payment') return base.filter(d => d.FRETE_PAGO === key).length;
       if (filterType === 'note') {
+         const ctesWithNotes = new Set(notes.map(n => n.CTE));
          return base.filter(d => {
-             const count = getNoteCount(d.CTE);
-             return key === 'WITH' ? count > 0 : count === 0;
+             const hasNotes = ctesWithNotes.has(d.CTE);
+             return key === 'WITH' ? hasNotes : !hasNotes;
          }).length;
       }
       if (filterType === 'txEntrega') return base.filter(d => parseCurrency(d.TX_ENTREGA) > 0).length;
@@ -486,7 +498,7 @@ const DataTable: React.FC<Props> = ({ data, onNoteClick, title, isPendencyView =
         <h2 className="text-xl font-bold text-primary-900">{title} <span className="text-gray-400 text-sm font-normal">({filteredData.length})</span></h2>
         <button onClick={() => {
             const exportData = sortedData.map(d => {
-                const latestNote = getLatestNote(d.CTE);
+                const latestNote = getLatestNote(d.CTE, d.SERIE);
                 return {
                     CTE: d.CTE, SERIE: d.SERIE, DATA_EMISSAO: d.DATA_EMISSAO, DATA_LIMITE: d.DATA_LIMITE_BAIXA,
                     STATUS: d.STATUS_CALCULADO || d.STATUS, UNIDADE: d.ENTREGA, CLIENTE: d.DESTINATARIO, VALOR: d.VALOR_CTE,

@@ -192,7 +192,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
   const currentNotes = notes.filter(n => n.CTE === cte.CTE);
   const isCurrentlyEmBusca = isCteEmBusca(liveCte.CTE, liveCte.SERIE, liveCte.STATUS);
   const isCurrentlyTad = isCteTad(liveCte.CTE, liveCte.SERIE);
-  const latestNote = getLatestNote(liveCte.CTE);
+  const latestNote = getLatestNote(liveCte.CTE, liveCte.SERIE);
   const isResolvido = (liveCte.STATUS === 'RESOLVIDO' || liveCte.STATUS === 'LOCALIZADA') || (latestNote && (latestNote.STATUS_BUSCA === 'RESOLVIDO' || latestNote.STATUS_BUSCA === 'LOCALIZADA'));
   const processHistory = processControlData.filter(p => p.CTE === liveCte.CTE && normalizeSerie(p.SERIE || '') === normalizeSerie(liveCte.SERIE || ''));
   const sortedProcessHistory = [...processHistory].sort((a, b) => parseDateString(b.DATA) - parseDateString(a.DATA));
@@ -211,8 +211,23 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
               const isImage = file.type.startsWith('image/') || !!file.name.match(/\.(jpg|jpeg|png|webp|heic|heif)$/i);
               
               if (isImage) {
-                  base64 = await compressImage(file);
+                  try {
+                      base64 = await compressImage(file);
+                  } catch (e) {
+                      console.warn('Compression failed or not supported for this image type. Using original.', e);
+                      // Fallback size check (e.g. 5MB limit for uncompressed images like HEIC)
+                      if (file.size > 5 * 1024 * 1024) {
+                          alert(`Imagem ${file.name} é  muito grande (${(file.size/1024/1024).toFixed(1)}MB) e não pôde ser comprimida. Limite é 5MB.`);
+                          continue;
+                      }
+                      base64 = await fileToBase64(file);
+                  }
               } else {
+                  // Non-image file size check (limit 5MB)
+                  if (file.size > 5 * 1024 * 1024) {
+                      alert(`Arquivo ${file.name} excede o limite de 5MB para anexos.`);
+                      continue;
+                  }
                   base64 = await fileToBase64(file);
               }
               newFiles.push({ name: file.name, type: file.type || (isImage ? 'image/jpeg' : 'application/octet-stream'), base64: base64 });
