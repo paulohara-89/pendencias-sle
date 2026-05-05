@@ -7,7 +7,7 @@ export const URLS = {
   LOGS: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQBIokGV3Yw_J9VBIw1x8lw-cPXJt-jDRMmMlv4Cp8cvHYDvQz_1DA0TCjsk6YBQzdvFwNmq_FxF4Ti/pub?gid=1706162160&single=true&output=csv',
   PROFILES: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQBIokGV3Yw_J9VBIw1x8lw-cPXJt-jDRMmMlv4Cp8cvHYDvQz_1DA0TCjsk6YBQzdvFwNmq_FxF4Ti/pub?gid=749221590&single=true&output=csv',
   PROCESS_CONTROL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQBIokGV3Yw_J9VBIw1x8lw-cPXJt-jDRMmMlv4Cp8cvHYDvQz_1DA0TCjsk6YBQzdvFwNmq_FxF4Ti/pub?gid=1180839837&single=true&output=csv',
-  APP_SCRIPT: 'https://script.google.com/macros/s/AKfycbywmDIbEULUtSjCRSNqIr3zPWjk489_5H42a3fj61zZx4h4m9yBwbGsbheuB3sViNj8/exec',
+  APP_SCRIPT: 'https://script.google.com/macros/s/AKfycbziZkiQqSJ_CflGavR7t3F3p-U2k1Ypt_skCp0NSyXsIJKiMWzJ5Yj_PGijPw5xOnN0/exec',
 };
 
 export const DEFAULT_CREDS = {

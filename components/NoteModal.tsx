@@ -266,7 +266,7 @@ const NoteModal: React.FC<Props> = ({ cte, onClose }) => {
         attachments: pendingFiles
       });
       setText(''); setIsSearch(false); setIsTad(false); setPendingFiles([]);
-    } catch (error) { alert('Erro ao enviar.'); } finally { setIsSending(false); }
+    } catch (error: any) { alert('Erro ao enviar: ' + (error.message || 'Falha na comunicação.')); } finally { setIsSending(false); }
   };
 
   const getLinks = (linkStr: string): string[] => {

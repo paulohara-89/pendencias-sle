@@ -77,7 +77,7 @@ const normalizeNotes = (raw: any[]): NoteData[] => {
       DATA: row.DATA || row.data || '',
       USUARIO: row.USUARIO || row.usuario || 'Sistema',
       TEXTO: row.TEXTO || row.texto || '',
-      LINK_IMAGEM: row.LINK_IMAGEM || row.link_imagem || '',
+      LINK_IMAGEM: row.LINK_IMAGEM || row.link_imagem || row.LINK || row.link || row.ANEXOS || row.anexos || row.IMAGEM || row.imagem || row.IMAGE_URL || row.image_url || row.attachments || row.attachmentLinks || '',
       STATUS_BUSCA: row.STATUS_BUSCA || row.status_busca || row.STATUS || row.status || '',
       pending: false
     };
@@ -121,7 +121,7 @@ const normalizeProcess = (raw: any[]): ProcessData[] => {
     DATA: row.DATA || row.data || '',
     USER: row.USER || row.user || row.USUARIO || '',
     DESCRIPTION: row.DESCRIPTION || row.description || '',
-    LINK: row.LINK || row.link || row.LINK_IMAGEM || '',
+    LINK: row.LINK || row.link || row.LINK_IMAGEM || row.ANEXOS || row.anexos || row.IMAGEM || row.imagem || row.IMAGE_URL || '',
     STATUS: row.STATUS || row.status || ''
   })).filter(p => p.ID);
 };
@@ -183,11 +183,18 @@ export const postToSheet = async (action: string, payload: any) => {
     
     try {
         const json = JSON.parse(responseText);
-        return json.success !== false;
-    } catch (parseError) {
+        const data = json.data || {};
+        if (json.success === false || data.success === false) {
+            throw new Error(json.error || data.error || json.message || data.message || "Erro no backend");
+        }
+        return json;
+    } catch (parseError: any) {
+        if (parseError.message && !parseError.message.includes('Unexpected token')) {
+            throw parseError; // It's our thrown custom error from inside the try, rethrow.
+        }
         console.warn("Resposta não-JSON do servidor:", responseText);
         if (responseText.includes('Success') || responseText.includes('true')) {
-            return true;
+            return { success: true, text: responseText };
         }
         throw new Error("Formato de resposta inválido do servidor: " + responseText.substring(0, 100));
     }

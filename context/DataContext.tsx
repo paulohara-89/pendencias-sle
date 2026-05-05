@@ -103,6 +103,44 @@ const parseNoteDate = (dateStr: string) => {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+function extractAttachmentLinks(result: any) {
+  const data = result.data || {};
+
+  const links =
+    result.attachmentLinks ||
+    data.attachmentLinks ||
+    result.urls ||
+    data.urls ||
+    [];
+
+  const imageUrl =
+    result.imageUrl ||
+    data.imageUrl ||
+    result.finalStringArgs ||
+    data.finalStringArgs ||
+    result.url ||
+    data.url ||
+    result.viewUrl ||
+    data.viewUrl ||
+    "";
+
+  const finalLinks: string[] = [];
+
+  if (Array.isArray(links)) {
+    finalLinks.push(...links);
+  }
+
+  if (typeof imageUrl === "string" && imageUrl.trim()) {
+    imageUrl
+      .split(/\s,\s|,\s|\s,|\|/)
+      .map((v: string) => v.trim())
+      .filter((v: string) => v.startsWith("http"))
+      .forEach((v: string) => finalLinks.push(v));
+  }
+
+  return [...new Set(finalLinks)];
+}
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [baseData, setBaseData] = useState<CteData[]>([]);
@@ -124,8 +162,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await fetchSheetData();
       setBaseData(result.base);
-      setNotes(result.notes);
-      setProcessControlData(result.process || []);
+      
+      setNotes(prev => {
+          const fetchedIds = new Set(result.notes.map(n => String(n.ID)));
+          const missingLocalNotes = prev.filter(n => !fetchedIds.has(String(n.ID)));
+          return [...result.notes, ...missingLocalNotes];
+      });
+
+      setProcessControlData(prev => {
+          const fetchedIds = new Set((result.process || []).map(p => String(p.ID)));
+          const missingLocalProcess = prev.filter(p => p.ID && !fetchedIds.has(String(p.ID)));
+          return [...(result.process || []), ...missingLocalProcess];
+      });
+
       setUsers(result.users);
       setProfiles(result.profiles || []);
       setGlobalData(result.data);
@@ -351,7 +400,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          ID: tempID, 
          DATA: formattedDate, 
          pending: true, 
-         LINK_IMAGEM: "" 
+         LINK_IMAGEM: "" // Initialized empty, filled via backend response or remains empty
      };
      
      if (processStatus) {
@@ -396,7 +445,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ? processDesc 
             : (notePayload.TEXTO || "Sem descrição");
 
-         await postToSheet('addNote', { 
+         const backendResult = await postToSheet('addNote', { 
            cte: notePayload.CTE, 
            serie: notePayload.SERIE || "", 
            username: notePayload.USUARIO, 
@@ -410,9 +459,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            status: notePayload.STATUS_BUSCA,
            currentStatus: notePayload.STATUS_BUSCA
          });
+
+         const attachmentLinks = extractAttachmentLinks(backendResult);
+
+         if (cleanAttachments.length > 0 && attachmentLinks.length === 0) {
+            throw new Error("O backend respondeu sucesso, mas não retornou link do anexo.");
+         }
          
-         setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false } : n));
-         setTimeout(() => { refreshData(); }, 3000);
+         const finalLinksString = attachmentLinks.join(" , ");
+
+         setNotes(prev => prev.map(n => n.ID === tempID ? { ...n, pending: false, LINK_IMAGEM: finalLinksString } : n));
+         
+         // Trigger refresh to fetch actual server records cleanly
+         setTimeout(() => { refreshData(); }, 1500);
      } catch (error) { 
          console.error("Add Note Failed", error); 
          setNotes(prev => prev.filter(n => n.ID !== tempID)); // Remove a nota pendente se falhar
